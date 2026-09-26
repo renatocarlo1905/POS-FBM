@@ -1,0 +1,20 @@
+Applied 001_core.sql
+Applied 002_locations.sql
+Applied 003_validation.sql
+PASS venta completa, decimales, código con ceros, hora exacta y decremento local
+PASS reenvío no duplica venta, pago ni inventario
+PASS mismo identificador con contenido distinto rechazado
+PASS pago incorrecto revierte operación completa
+PASS fallo tardío de pago revierte partidas e inventario
+PASS folio por terminal no se puede duplicar
+PASS hora sin zona y cantidades/secuencias fraccionarias rechazadas
+PASS sesión de caja de otra terminal rechazada
+PASS dos reintentos simultáneos crean una sola venta en el segundo local
+PASS ventas simultáneas de una ubicación mantienen el saldo correcto
+PASS venta ya cobrada con discrepancia se conserva y genera incidencia
+PASS historial y movimientos no admiten sobrescritura ni borrado
+PASS una asignación local no se comparte entre dos terminales
+PASS cierre de caja incompleto rechazado
+PASS total Coyoacán suma sus ubicaciones sin duplicarlas
+15 grupos de pruebas pasaron
+PASS backup restored; columns, functions, migrations, branches, warehouses, locations and sale count match

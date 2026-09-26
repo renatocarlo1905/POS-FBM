@@ -1,0 +1,61 @@
+{
+  "batch": "demo-2026-enero-septiembre-v1",
+  "from": "2026-01-01",
+  "through": "2026-09-25T12:20:17.201401-06:00",
+  "sales": 2991,
+  "products_added": 24,
+  "units_per_product": 80,
+  "gross_cents": 588314000,
+  "discount_cents": 19851100,
+  "net_cents": 568462900,
+  "by_month": {
+    "2026-01": 267,
+    "2026-02": 297,
+    "2026-03": 324,
+    "2026-04": 297,
+    "2026-05": 378,
+    "2026-06": 341,
+    "2026-07": 380,
+    "2026-08": 372,
+    "2026-09": 335
+  },
+  "by_user": {
+    "Himelda": 435,
+    "Zicaru": 448,
+    "Carlo": 440,
+    "Melissa": 437,
+    "Ximena": 408,
+    "Citlali": 397,
+    "Jessica": 426
+  },
+  "by_branch": {
+    "1": 1646,
+    "2": 1345
+  },
+  "product_ids": [
+    "p-cfdc0fe9fd494680b2ca8f40a41cf2db",
+    "p-139fe4e4a97648e48004945b6965a069",
+    "p-48141ab5bf694a1abaf4e954e67e88a4",
+    "p-f2af867920bd43da9a7df3a80ff4e737",
+    "p-a76dc6ffec864bef89b376782f25de81",
+    "p-36baee60653a4aee9358fc60fea13210",
+    "p-74d2069b4907401c8db21dc6bd9e4014",
+    "p-070e744cbaf4476787291318b9ea5945",
+    "p-8a9afe37061c4a9eac7959c96edf252c",
+    "p-13ff34f1086b464e9b074be792601d19",
+    "p-5a7a5136a99f447da075f3386bf7ee05",
+    "p-eae01e07394446369f3719417a812c3a",
+    "p-ff329a7628a444b28460791b647de256",
+    "p-075b4c5d58014863ac5953db49162d8c",
+    "p-69abd7c40f1744918e030e5db3605545",
+    "p-dd36ce84485a4b5bbe46923e91450138",
+    "p-1461aa965a064d46b922083978fdfad9",
+    "p-e8d9794f5f4746eba4d36370a5de877d",
+    "p-25632d1492d44d5ab993a9a438636b36",
+    "p-4eaf949e7e6f4dbca65575b1d04b7ab2",
+    "p-570628045b8f4d678e1d4566dcf7c1e7",
+    "p-d9eeb844121f4de3aa1d5824ac1beba8",
+    "p-cd881d03cb344fe8bf606f842aa5f02c",
+    "p-ea74f337aca24275952f570ae4ee3ae7"
+  ]
+}

@@ -1,0 +1,26 @@
+test_01_postgres_shared_stock_and_money (__main__.Lab.test_01_postgres_shared_stock_and_money) ... ok
+test_02_offline_last_unit_keeps_two_sales (__main__.Lab.test_02_offline_last_unit_keeps_two_sales) ... ok
+test_03_lost_ack_restart_and_uuid_conflict (__main__.Lab.test_03_lost_ack_restart_and_uuid_conflict) ... ok
+test_04_ack_and_snapshot_are_atomic (__main__.Lab.test_04_ack_and_snapshot_are_atomic) ... ok
+test_05_permissions_discount_and_last_downloaded (__main__.Lab.test_05_permissions_discount_and_last_downloaded) ... ok
+test_06_edit_password_and_admin_protection (__main__.Lab.test_06_edit_password_and_admin_protection) ... ok
+test_07_cash_blind_close_and_distribution (__main__.Lab.test_07_cash_blind_close_and_distribution) ... ok
+test_08_copy_failure_does_not_block (__main__.Lab.test_08_copy_failure_does_not_block) ... ok
+test_09_independent_copy_restores_pending (__main__.Lab.test_09_independent_copy_restores_pending) ... ok
+test_10_postgres_backup_restore (__main__.Lab.test_10_postgres_backup_restore) ... ok
+test_11_pdf_snapshot_and_wrapping (__main__.Lab.test_11_pdf_snapshot_and_wrapping) ... ok
+test_12_concurrent_online_last_unit (__main__.Lab.test_12_concurrent_online_last_unit) ... ok
+test_13_http_boundaries_and_pdf (__main__.Lab.test_13_http_boundaries_and_pdf) ... ok
+test_14_rounding_forgery_and_order (__main__.Lab.test_14_rounding_forgery_and_order) ... ok
+test_15_manual_product_and_ingress (__main__.Lab.test_15_manual_product_and_ingress) ... ok
+test_16_payment_correction_preserves_close_and_original (__main__.Lab.test_16_payment_correction_preserves_close_and_original) ... ok
+test_17_cancel_once_and_linked_exchange_block (__main__.Lab.test_17_cancel_once_and_linked_exchange_block) ... ok
+test_18_sellers_and_authorizer (__main__.Lab.test_18_sellers_and_authorizer) ... ok
+test_19_replacement_chain_atomic_and_stock (__main__.Lab.test_19_replacement_chain_atomic_and_stock) ... ok
+test_20_correction_race_permissions_immutability_and_brand (__main__.Lab.test_20_correction_race_permissions_immutability_and_brand) ... ok
+test_21_two_corrections_adjust_current_and_historical_cash (__main__.Lab.test_21_two_corrections_adjust_current_and_historical_cash) ... ok
+
+----------------------------------------------------------------------
+Ran 21 tests in 40.172s
+
+OK

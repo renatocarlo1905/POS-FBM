@@ -1,0 +1,63 @@
+# Casos de aceptación vinculados
+
+A01-A30 del plan v1, conservados como escenarios por ejecutar. No confundir con las pruebas locales de la maqueta. Cada caso se desglosa por requisito al implementar.
+
+## A01 · Identidad y permisos. Preparar administrador y empleados con derechos distintos. Intentar venta, descuento, costo, retiro, corrección y acceso al dashboard; repetir por interfaz y acceso directo a la aplicación. Denegar sin derecho; autorizar puntualmente con identidad de operador/autorizador; conservar vendedores. Probar límites locales y cambios remotos según D18. Evidencia: matriz de intentos y auditoría. E1/E3-E7; ACC, GEN-03.
+
+## A02 · Persistencia y secuencia offline. Con sesión preparada, cortar internet, abrir/vender/descontar/registrar movimientos/cerrar/abrir otra sesión y reiniciar navegador/equipo. Recuperar operaciones guardadas y sincronizar con fecha, sucursal, pagos y sesión originales, en secuencia. Ensayar corte durante guardado; nunca confirmar algo que no quedó persistido. Evidencia: comparación local-central. E1/E3; OFF-01/03, CAJ-07.
+
+## A03 · Reintentos y acuses. Reenviar la misma venta y movimientos varias veces; perder respuesta después de guardado central y reiniciar antes de persistir el acuse. Una sola venta, pago y movimiento efectivo. Identificador repetido con contenido diferente produce conflicto visible. Restaurar copia y reenviar respeta lo ya recibido. E1/E3/E8; OFF-02, RES-06.
+
+## A04 · Stock compartido. Dos POS conocen una unidad: desconectar ambos y registrar una venta en cada uno. Al sincronizar conservar ambas, saldo -1 y alerta vinculada; intentos posteriores con conocido cero/negativo se bloquean sin excepción. También bloquear cantidad mayor al conocido y excluir apartadas/dañadas. Probar competencia online según contrato acordado. E1-E3; OFF-05/09.
+
+## A05 · Ticket e impresión independiente. Ejecutar venta con Star USB, etiqueta con Sewoo y lectura real bajo Linux. Fallar impresión después de guardar; reimprimir sin nuevo cobro/stock. Verificar copias por operación, márgenes/corte y ausencia de impresión remota por corrección de dashboard. Evidencia: muestras físicas y registros. E1/E2/E5-E7; TIC, COR-14.
+
+## A06 · Segunda copia y sucursal apagada. Mantener otra caja apagada y verificar copia fuera del equipo de origen. Quitar destino de respaldo: advertir sin bloquear ventas. Reconectar y comprobar recuperación conforme a D20, sin duplicaciones. Separar pérdida de internet de caída de red local; el servidor muestra solo último estado conocido. E1/E8; RES-02/05.
+
+## A07 · Catálogo, códigos y etiquetas. Registrar productos iguales/distintos y catálogos inactivos. Validar proveedor/costo/descripciones, peso opcional hasta 999 g con tres decimales e imagen opcional. Conservar ceros históricos; leer código nuevo y anterior con aviso/datos vigentes. Cinco unidades iguales usan un código y cinco etiquetas. Precio opcional, peso en clave; imprimir no cambia stock. E2; INV, D09-D11/D21.
+
+## A08 · Importación íntegra y única. Cargar archivo de un almacén con un error, duplicado interno o coincidencia existente: rechazar toda la carga y emitir fila/campo/motivo. Corregir, previsualizar y confirmar; reintentar y cargar mismo contenido según D09 sin duplicar. Cantidad cinco en una fila crea cinco unidades. Costos solo a autorizados. E2; IMP-01/08.
+
+## A09 · Ingreso y reversión. Buscar producto con saldo cero/positivo, reactivar si corresponde y recibir cantidad. Cambiar costo/precio con permiso: afecta catálogo y preserva histórico. Revertir ingreso completo una vez según D12; rechazar si movimientos posteriores lo impiden. Conservar historial y no restaurar automáticamente costo/precio. E2; ING-01/07.
+
+## A10 · Estados, traspasos y mínimos. Trasladar disponibles/dañadas/apartadas conservando estado y vínculo; validar cantidades/origen/destino. Salida de Coyoacán exige ambos POS sincronizados. Recuperar dañadas con motivo; dar baja y registrar nuevo ingreso si reaparecen. Mínimo 3: saldo 3 alerta, saldo 4 resuelve, por almacén disponible. Sin módulo de conteo físico. E2/E5/E7; MOV, MIN.
+
+## A11 · Cobro combinado y descuentos. Con caja abierta, venta $1,000: tarjeta $600, efectivo recibido $500 → efectivo aplicado $400 y cambio $100. Verificar descuento global y redondeos D01; máximo una tarjeta/transferencia y metadatos. Rechazar cambio financiado con tarjeta o pago que no cubra total. Saldo integrado requiere cliente, código, permiso y conexión. E3/E4; VTA, PAG.
+
+## A12 · Aperturas y movimientos. Intentar segunda sesión simultánea en el mismo local, incluyendo escenario D19: bloquear; permitir sesiones independientes entre locales. Fondo sugerido puede cambiar conservando diferencia. Entradas/gastos/retiros exigen derecho, motivo, usuario y sesión. Secuencia cierre/nueva apertura sigue válida offline y al sincronizar. E3; CAJ-01/02/06/07.
+
+## A13 · Cierre ciego. Fondo $500 + cobro neto $400 + entrada $100 - gasto $50 - retiro $200 = esperado $750. Capturar conteo $730 antes de revelar comparación; diferencia -$20. Fondo siguiente $300 + sobre $430 = $730. Cerrar con descuadre sin compensarlo automáticamente en próxima apertura. Tarjeta, transferencia y saldo no aumentan efectivo esperado. E3; CAJ-03/05.
+
+## A14 · Vendedores y comisiones. Venta neta $1,000 entre dos vendedores → $500 cada uno. Filtrar ambos da $1,000. Cambiar porcentaje de comisión no cambia atribución; conservar cada cálculo guardado y marcar revisión por corrección/sincronización tardía. Apartados mantienen vendedores iniciales y reparaciones Matanga sin comisión. E3/E5/E7; VEN, RPT-04/07.
+
+## A15 · Saldo, vigencia y concurrencia. Crear saldos con vencimientos distintos y sin vencimiento; consumir por orden pactado y remanentes. Dos locales no exceden disponible. Restituir conserva origen/vigencia, incluso vencido. Solo admin crea saldo manual y anula el no usado; aplicación/alta/anulación no generan dinero. Configuración futura no altera saldos previos. E4/E6; CLI-01/11/20/25.
+
+## A16 · Código de cliente. Probar emisión, reimpresión autorizada con motivo, quinto fallo global y bloqueo sin desbloqueo temporal. Solo admin sustituye o desbloquea; sustituir no desbloquea por sí solo. Código viejo deja de servir; compra con otro medio sigue disponible. Código no aparece en copias internas, historial, logs o descarga genérica; el derecho de empleado no lo sustituye. E4/E7; CLI-12/19.
+
+## A17 · Edición y unificación. Editar ficha con permiso conservando antes/después y comprobantes originales. Dos personas con mismo teléfono siguen separadas. Admin unifica duplicado con motivo: mismo total de saldo, vencimientos intactos, vínculos únicos, códigos viejos invalidados, nuevo emitido y bloqueo heredado. Aplicar D08 para configuración futura. E4; CLI-26/29.
+
+## A18 · Ciclo de apartado. Total $1,000: anticipo $400, abono $200, liquidación $400, en distintas sesiones/locales. Registrar cobros donde ocurren; reservar conjunto, mantener precio/costo inicial y vendedores; reconocer venta $1,000 una vez al liquidar. Entregar completo solo desde POS con conexión; no sustituir piezas ni cobrar de más. Emitir dos copias por movimiento. E5/E7; APA-01/09, D02.
+
+## A19 · Plazos y cancelación de apartado. Probar final de días naturales 7 y 45, alerta desde siete días antes de vencer y plazo configurado conservado. Vencimiento no libera automáticamente; liberar requiere autorización. Admitir liquidación excepcional antes de liberar. Cancelación válida de total $1,000 con $400 pagados entrega mercancía por al menos $400; libera originales y conserva atribución/diferencia sin duplicar. E5/E6; APA-10/16, D03/D06.
+
+## A20 · Reparación y presupuesto. Recibir varias piezas del cliente fuera del inventario comercial; total $1,000, mínimo $500. Rechazar descuento y abono intermedio. Modificar presupuesto pendiente con permiso, motivo y acuerdo: al subir no pedir otro anticipo; al bajar debajo de pagado crear solo exceso como saldo. Aplicar D05 para liquidación. Tres tickets al recibir y dos al entregar, copia interna con firma. E5; REP-01/07.
+
+## A21 · Estados y recogida. Recibida → en reparación → lista → entregada. Dashboard solo avanza estados permitidos; entrega exclusivamente en POS y liquidada. Plazo 45 días desde lista, conservado por orden: al vencer alerta sin cancelación/baja automática. Corregir lista → en reparación suspende plazo; nuevo lista reinicia uno completo con historial. E5/E7; REP-08/13.
+
+## A22 · Cancelación de reparación. Permitir solo recibida, nunca antes en reparación y no liquidada, online con autorización. Si se corrigió de en reparación a recibida sigue bloqueada. En cancelación válida devolver piezas, aplicar anticipo a mercancía igual/mayor y documentar diferencia; no saldo guardado automático. Valor previo sigue Matanga; diferencia a vendedores. Ticket interno firmado. E5/E6; REP-12/15.
+
+## A23 · Cambios parciales/repetidos. Devolver valor neto original $800 y entregar $1,000 → cobrar $200, conservar atribución $800 y asignar $200 a quienes atienden. Verificar buen estado, origen y no reutilización de unidades ya cambiadas; plazo hasta final día 15 y nuevo plazo solo para nuevas piezas. Descuento, costo y cantidades conforme D01/D03; saldo usado no se restituye además. E6; CAM, CLI-23.
+
+## A24 · Corrección y reemplazo de venta. Intentar editar partidas finalizadas: usar anulación/reemplazo enlazados. Revertir una vez, bloquear venta con cambio vinculado y guardar motivo/autorización. Inventario revierte en fecha real de cancelación; importes ajustados se vinculan al período/sesión originales. Probar medio de pago conservando total y reemplazo distinto según D04. POS imprime interno; dashboard no. E6; COR-01/15.
+
+## A25 · Cierre corregido y bloqueo económico. Corregir en octubre venta de septiembre $1,000 de efectivo a tarjeta: conservar cierre contado/fondo/sobre/diferencia original, mostrar ajuste y no mover efectivo físico de octubre. Pago de orden pendiente puede corregirse y solo admin anularlo según D05. En orden liquidada bloquear importes, medios, piezas/presupuesto incluso al admin; consulta/entrega siguen permitidas. E6; COR-09/17.
+
+## A26 · Indicadores y períodos. Apartado $1,000 recibe $400 en septiembre y $600 al liquidar en octubre: cobros por esas fechas y venta completa en octubre; costo del alta $500 conserva beneficio $500. Reparaciones separadas, saldo sin dinero nuevo; cambios/cancelaciones según fórmulas aprobadas. Comparar tarjetas, gráfica, tabla y Excel; filtros no duplican vendedores ni tickets. E7; CAL, RPT.
+
+## A27 · Navegación, seguimiento y alertas. Buscar folio/cliente/teléfono, abrir vínculos y PDF cliente/negocio con controles. Sesiones abiertas primero; revisar diferencia sin alterar cierre. Apartado liquidado sin recoger aparece separado de vencidos. Alerta lleva al origen; revisar no resuelve, desaparecer causa resuelve y reaparecer crea nueva vinculada. Probar estados permitidos del dashboard y entrega bloqueada. E7; DAS-26/45.
+
+## A28 · Filtros, frescura y carga. Verificar fecha/hora en Ciudad de México, accesos rápidos, sucursales/vendedores y agrupación. Comparar mes en curso con mismos días previos y evitar infinito con base cero. Excel conserva filtros/actualización; POS desconectado se identifica con última recepción. Histórico sin hora/costo no inventa precisión/beneficio. Medir objetivos D23 con datos de prueba representativos. E7/E8; DAS-04/09, MIG-04/05.
+
+## A29 · Migración reproducible. Cargar sobre entorno de ensayo, comparar conteos, importes, stock por estado, saldos y referencias. Repetir carga no duplica. Tres años de ventas y pendientes sin límite; conservar referencias antiguas y archivo del resto. Histórico no descuenta stock ni ingresa caja; negativos y faltantes tienen tratamiento documentado. Ensayar congelamiento, carga final y rechazo ante diferencias sin explicar. E8; MIG.
+
+## A30 · Restauración y jornada de salida. Restaurar central y sustituir un POS con pendientes; reenvío no duplica recibidos. Verificar segunda copia, objetivos D20, una caja apagada y fallas de red/impresora. Ejecutar jornada de todos los módulos con roles reales y datos de prueba, después ensayo de corte/retorno incluyendo ventas nuevas. Evidencia de capacitación, soporte y versión aprobada. E8; RES, TIC, GEN-01.

@@ -1,0 +1,10 @@
+# Ajustes de POS — 26/09/2026
+
+- Comprobantes desaparece de la navegación sin permiso receipts; una vista seleccionada previamente vuelve a venta. El servicio omite operaciones y correcciones del estado y requiere receipts + reprint para descargar PDF. Se conservan los permisos descargados para operación sin conexión.
+- El módulo se llama Inventario.
+- Descuento se captura en pesos (hasta dos decimales). Porcentaje de referencia con dos decimales. La validación usa centavos exactos contra el máximo porcentual del rol, sin reconvertir el monto mediante un porcentaje redondeado. Se mantiene compatibilidad con solicitudes históricas por porcentaje.
+- Vendedores: selección explícita de uno o varios mediante desplegable y etiquetas con opción de quitar. Código estable FBV- seguido del identificador en mayúsculas, visible en la ficha de empleado. Lector compatible: escribe texto y Enter en Escanear código de vendedor. No autentica ni confirma la venta. No añade dos veces al mismo empleado. Los códigos se descargan con los empleados para uso sin conexión. Se atribuye la venta a los seleccionados; no incorpora un nuevo cálculo de comisiones monetarias.
+- Banco y últimos cuatro dígitos se muestran y requieren cuando tarjeta > 0. Referencia se muestra y requiere cuando transferencia > 0. Al retirar el medio se limpian y deshabilitan sus datos.
+- Dos cajas simuladas históricas estaban abiertas además de las dos operativas. Se cerraron únicamente las simuladas (cuadre ficticio sin diferencia) con auditoría. Ahora hay una operativa abierta por sucursal. La semilla futura crea sesiones simuladas cerradas; el servicio ya impide otra apertura operativa por sucursal.
+
+Verificación: 22 pruebas de integración aprobadas, más prueba adicional de segunda apertura bloqueada en ambas sucursales y las tres pruebas del reporte de cajas. HTTP rechaza PDF si receipts está desactivado aunque reprint esté activo. Navegador: $650 menos $259.16 = $390.84; porcentaje 39.87 %. Selección Melissa por menú y Ximena por código, datos bancarios condicionales, dos cajas abiertas totales. No se registraron ventas operativas durante la comprobación visual.

@@ -1,0 +1,27 @@
+# Credenciales y configuración privada
+.env
+.env.*
+!.env.example
+.postgres.env
+**/postgres.json
+**/postgres.env
+*.pem
+*.key
+# Estado local, respaldos y artefactos regenerables
+lab/e1/data/
+backups/
+output/
+tmp/
+*.sqlite
+*.sqlite3
+*.db
+*.dump
+*.log
+# Entornos y cachés
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+node_modules/
+.DS_Store

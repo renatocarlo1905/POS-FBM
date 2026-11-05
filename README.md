@@ -2,6 +2,35 @@
 
 Sistema de punto de venta para dos sucursales y un almacén compartido. **Laboratorio local en desarrollo; no aprobado todavía para sustituir el sistema del negocio.**
 
+## Última actualización · 5 de noviembre de 2026
+
+Esta actualización amplía inventario, usuarios y gestión de apartados y reparaciones, y mejora los cobros y comprobantes del laboratorio.
+
+### Inventario y usuarios
+
+- Importación de **productos nuevos** mediante plantilla de Google Sheets descargada como Excel; también se admiten CSV y TSV. Incluye vista previa, validaciones de catálogo y detección de duplicados.
+- **Mercancía recurrente**: búsqueda de artículos existentes por descripción corta, larga o código; lista de cantidades y borrador persistente en el navegador. Disponible en administración y sucursales con permisos; confirmar requiere conexión.
+- Descripciones corta y larga, precios fijos o por fórmula de costo/peso con terminación elegida por producto, y opción de imprimir el precio en etiqueta. El detalle del cálculo se consulta desde administración.
+- Catálogo de proveedores habilitados, fecha de carga y última actividad de los artículos.
+- Creación de usuarios desde administración, con rol y acceso a sucursales.
+
+Consulta los campos, límites y procedimientos en [Importación de productos y mercancía recurrente](docs/e1/importacion-productos.md).
+
+### Apartados, reparaciones y cobros
+
+- Datos del cliente identificados claramente, incluido el teléfono.
+- Acciones administrativas desde el dashboard: editar, registrar pagos, entregar, cancelar por mercancía, liberar apartados vencidos y cambiar estados de reparación, según las reglas de cada orden.
+- Pagos, cancelaciones y entregas desde el dashboard requieren elegir una sucursal autorizada. Los cobros se asignan a su caja abierta; la sucursal debe estar conectada y sincronizada.
+- Se exige importe exacto en ventas, abonos, liquidaciones y diferencias de cambios. Los pagos incompletos o excedidos se rechazan; los tickets no muestran devolución de cambio.
+- Los cambios de mercancía aparecen en Comprobantes de la sucursal y permiten reimpresión. La búsqueda de piezas muestra su precio junto con ambas descripciones.
+- Mejoras de búsqueda de tickets, indicadores de carga y alineación de controles de categorías.
+
+### Validación y datos locales
+
+Se añadieron pruebas de importación, metadatos, ingresos recurrentes, creación de usuarios y escenarios de órdenes. Las verificaciones recientes incluyen 10 pruebas de órdenes, 2 de cambios de mercancía y una de pago exacto en ventas; también se comprobaron controles del dashboard en el navegador.
+
+El laboratorio local se preparó, con respaldo previo, con 12 apartados adicionales, ventas y cajas hasta el **4 de noviembre de 2026** y ninguna caja abierta. Esta preparación de PostgreSQL/SQLite y sus respaldos **no se distribuye con el repositorio**: clonar GitHub no restaura ese estado local. El módulo `lab/e1/order_training.py` conserva los escenarios iniciales de órdenes, no una copia de la base local completa.
+
 ## Aplicación vigente
 
 El código activo está en `lab/e1/`. Las carpetas `prototype/` y `database/` conservan prototipos anteriores; no deben confundirse con el servicio vigente ni aplicarse sus migraciones a E1.

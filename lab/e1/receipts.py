@@ -69,7 +69,7 @@ def receipt_pdf(event,reprint=False):
         add('Valor reconocido: '+fmt(p['credit']));add('PIEZAS ENTREGADAS',True)
         for x in p['new']['items']:add(f"{x['qty']} x {x['name']} · {fmt(x['net'])}")
         add('Descuento mercancía nueva: '+fmt(p['new']['discount']));add('Total mercancía nueva: '+fmt(p['new']['total']));add('DIFERENCIA: '+fmt(p['difference']),True)
-        for label,k in [('Efectivo recibido','received_cash'),('Efectivo aplicado','cash'),('Tarjeta','card'),('Transferencia','transfer'),('Cambio','change')]:add(label+': '+fmt(p['new'][k]))
+        for label,k in [('Efectivo','cash'),('Tarjeta','card'),('Transferencia','transfer')]:add(label+': '+fmt(p['new'][k]))
         add('Vendedores de la diferencia: '+', '.join(p['new']['sellers']));add('Sin devolución de dinero. Se conserva la venta y cierre original.');add('Conservar comprobante para cliente y local.')
         if any(x.get('non_inventory') for x in p['returned']):add('Código 99 recibido: sin ingreso a inventario; aviso al administrador.')
     elif event['kind']=='correction':

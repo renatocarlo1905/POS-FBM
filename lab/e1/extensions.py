@@ -1,5 +1,7 @@
 """Manual inventory and immutable corrections for the E1 local laboratory."""
 import base64, copy, hashlib, json, uuid
+from functools import wraps
+from product_pricing import calculate as calculate_product_price
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from domain import RuleError, require, cleantext, money, now, pack
@@ -12,6 +14,7 @@ EXTRA_PERMS={'product_create':'Crear productos e ingresar mercancía','cancel_sa
 PERMS.update(EXTRA_PERMS)
 
 def transaction(fn):
+ @wraps(fn)
  def wrapped(c,*args,**kwargs):
   with c.lock:
    c.db.execute('BEGIN IMMEDIATE')
@@ -68,11 +71,14 @@ def init(c):
 
 
 def catalog(c,cost=False):
+ from product_dates import catalog_dates, EMPTY
+ dates=catalog_dates(c)
  stock={r['id']:r['available'] for r in c.db.execute('SELECT * FROM stock')};other={}
  for r in c.db.execute('SELECT * FROM warehouse_stock'):other.setdefault(r['product'],{})[r['warehouse']]=r['quantity']
  result=[]
  for r in c.db.execute('SELECT data FROM products ORDER BY code'):
   p=json.loads(r['data']);p['available']=stock.get(p['id'],0);p['warehouses']={'coyoacan':p['available'],'oficina':0,'santa_rosa':0,**other.get(p['id'],{})}
+  p.update(dates.get(p['id'],EMPTY))
   if not cost:p.pop('cost',None)
   result.append(p)
  return result
@@ -134,10 +140,23 @@ def delete_category(c,actor,d):
   types=c.get('types');types.pop(row['id']);c.put('types',types)
  c.put('categories',[x for x in rows if x['id']!=row['id']]);c.audit(actor,'category_deleted',{'category':row,'replacement':replacement,'products':[p['id'] for p in assigned]});return {'deleted':row['id'],'reassigned':len(assigned)}
 
+def approved_provider(c,ident):
+ return next((p for p in c.get('providers') if p['id']==ident and p.get('approved',True)),None)
+
 @transaction
 def provider(c,actor,d):
- name=cleantext(d.get('name',''),100);require(name,'Nombre del proveedor obligatorio.');rows=c.get('providers');id=max(p['id'] for p in rows)+1
- rows.append({'id':id,'name':name,**{k:cleantext(d.get(k,''),200) for k in ('phone','contact','address')}});c.put('providers',rows);c.audit(actor,'provider_created',{'id':id,'name':name});return {'id':id}
+ user=next((u for u in c.get('users') if u['id']==actor),None)
+ require(user and user['active'] and user['role']=='admin','Solo Administración puede registrar o habilitar proveedores.')
+ rows=c.get('providers');ident=d.get('id');existing=next((p for p in rows if p['id']==ident),None)
+ require(ident is None or existing,'Proveedor inexistente.')
+ name=cleantext(d.get('name',''),100);require(name,'Nombre del proveedor obligatorio.')
+ require(not any(p['id']!=ident and p['name'].strip().casefold()==name.casefold() for p in rows),'Ya existe un proveedor con ese nombre.')
+ approved=d.get('approved',True);require(type(approved)is bool,'Estado de proveedor inválido.')
+ before=copy.deepcopy(existing)
+ row=existing if existing is not None else {'id':max((p['id'] for p in rows),default=0)+1,'created_at':now()}
+ row.update(name=name,approved=approved,updated_at=now(),**{k:cleantext(d.get(k,''),200) for k in ('phone','contact','address')})
+ if existing is None:rows.append(row)
+ c.put('providers',rows);c.audit(actor,'provider_updated' if before else 'provider_created',{'before':before,'after':row});return row
 
 def next_product_code(c,m,t,w):
  prefix=f'{int(m):02}{int(t):02}';codes=[]
@@ -159,20 +178,24 @@ def edit_product(c,actor,d):
   require(previous['digest']==digest,'Identificador repetido con distintos datos.');return previous['result']
  row=c.db.execute('SELECT data FROM products WHERE id=?',(d.get('id'),)).fetchone();require(row,'Producto inexistente.')
  before=json.loads(row[0]);require(d.get('revision')==before.get('revision',0),'El producto cambió. Actualiza y vuelve a editarlo.')
+ if 'price_mode' not in d and before.get('price_mode')=='formula':
+  r=before['price_rule'];d={**d,'price_mode':'formula','price_base':r['base'],'price_multiplier':r['multiplier'],'price_ending':r['ending']}
  require(not any(k in d for k in ('quantity','warehouse','code','aliases')),'Las existencias y el código no se editan directamente.')
- require(int(d.get('provider',before['provider']))==before['provider'],'Otro proveedor requiere un producto nuevo.')
+ provider_id=int(d.get('provider',before['provider']))
+ require(approved_provider(c,provider_id) or provider_id==before['provider'],'Selecciona un proveedor habilitado.')
  p=dict(before);p.update(name=cleantext(d.get('name',''),100),description=cleantext(d.get('description',''),1000))
  require(p['name'] and p['description'],'Las dos descripciones son obligatorias.')
  reason=cleantext(d.get('reason',''),300);require(reason,'Indica el motivo del cambio.')
  m=str(d.get('material_id'));cid=str(d.get('category_id',before.get('category_id',before['type_id'])))
  path=category_path(c,cid);t=str(path[0]['id']);materials=c.get('materials');types=c.get('types')
  require(m in materials and t in types,'Selecciona material y tipo registrados.')
- price=money(d.get('price'));cost=money(d.get('cost'));require(price>0,'Precio mayor a cero requerido.')
+ cost=money(d.get('cost'))
  raw=str(d.get('weight') or '').strip();w=None
  if raw:
   try:w=Decimal(raw.replace(',','.'))
   except InvalidOperation:raise RuleError('Peso inválido.')
   require(w.is_finite() and 0<w<=999 and w*1000==(w*1000).to_integral_value(),'Peso mayor a cero, máximo 999 g y tres decimales.')
+ price,pricing=calculate_product_price(d,cost,w)
  image=d.get('image','');require(isinstance(image,str) and (not image or image.startswith('data:image/png;base64,')),'La imagen de producto debe ser PNG.');template({'logo':image})
  old_weight=Decimal(before['weight']) if before.get('weight') is not None else None
  code_changed=int(m)!=before['material_id'] or int(t)!=before['type_id'] or w!=old_weight
@@ -181,6 +204,7 @@ def edit_product(c,actor,d):
   p['aliases']=list(dict.fromkeys([*before.get('aliases',[]),before['code']]))
   p['code']=next_product_code(c,m,t,w)
  p.update(material_id=int(m),material=materials[m],type_id=int(t),type=types[t],category_id=cid,sub1=path[1]['name'] if len(path)>1 else '',sub2=path[2]['name'] if len(path)>2 else '',price=price,cost=cost,weight=str(w) if w is not None else None,image=image,print_price=bool(d.get('print_price')),revision=before.get('revision',0)+1)
+ p.update(pricing);p['provider']=provider_id
  c.db.execute('UPDATE products SET code=?,data=? WHERE id=?',(p['code'],pack(p),p['id']))
  result={'product':p,'code_changed':code_changed}
  c.audit(actor,'product_edited',{'before':before,'after':p,'reason':reason,'request_id':request_id})
@@ -195,16 +219,18 @@ def create_product(c,actor,d):
  if d.get('category_id'):
   path=category_path(c,d['category_id']);d.update(type_id=path[0]['id'],sub1=path[1]['name'] if len(path)>1 else '',sub2=path[2]['name'] if len(path)>2 else '')
  materials=c.get('materials');types=c.get('types');m=str(d.get('material_id'));t=str(d.get('type_id'));require(m in materials and t in types,'Selecciona material y tipo registrados.')
- provider_id=int(d.get('provider',0));require(any(x['id']==provider_id for x in c.get('providers')),'Selecciona proveedor registrado.')
- price=money(d.get('price'));cost=money(d.get('cost'));require(price>0,'Precio mayor a cero requerido.')
+ provider_id=int(d.get('provider',0));require(approved_provider(c,provider_id),'Selecciona un proveedor habilitado.')
+ cost=money(d.get('cost'))
  weight=d.get('weight','').strip();w=None
  if weight:
   try:w=Decimal(weight.replace(',','.'))
   except InvalidOperation:raise RuleError('Peso inválido.')
   require(w.is_finite() and 0<=w<=999 and w*1000==(w*1000).to_integral_value(),'Peso máximo 999 g y tres decimales.')
+ price,pricing=calculate_product_price(d,cost,w)
  qty=d.get('quantity');require(type(qty)is int and 0<=qty<=100000,'Cantidad entera no negativa requerida.');warehouse=d.get('warehouse');require(warehouse in WAREHOUSES,'Almacén requerido.')
  code=next_product_code(c,m,t,w);image=d.get('image','');require(not image or image.startswith('data:image/png;base64,'),'La imagen de producto debe ser PNG.');template({'logo':image})
  pid='p-'+uuid.uuid4().hex;product={'id':pid,'code':code,'name':name,'description':description,'material':materials[m],'material_id':int(m),'type':types[t],'type_id':int(t),'category_id':d.get('category_id',t),'sub1':cleantext(d.get('sub1',''),80),'sub2':cleantext(d.get('sub2',''),80),'price':price,'cost':cost,'provider':provider_id,'weight':str(w) if w is not None else None,'image':image,'active':True,'print_price':bool(d.get('print_price',True))}
+ product.update(pricing)
  c.db.execute('INSERT INTO products VALUES(?,?,?)',(pid,code,pack(product)));c.db.execute('INSERT INTO stock VALUES(?,0)',(pid,))
  add_stock(c,pid,warehouse,qty,id,'Alta manual de producto');result={'product':product,'quantity':qty,'warehouse':warehouse,'at':now()}
  c.db.execute('INSERT INTO inventory_entries VALUES(?,?,?,?,?)',(id,digest,now(),actor,pack(result)));c.audit(actor,'product_created',{'id':pid,'code':code,'quantity':qty,'warehouse':warehouse});return result
@@ -216,6 +242,26 @@ def ingress(c,actor,d):
  r=c.db.execute('SELECT data FROM products WHERE id=?',(d.get('product'),)).fetchone();require(r,'Producto inexistente.');p=json.loads(r[0]);require(p['active'],'Reactiva el producto antes de ingresar mercancía.')
  qty=d.get('quantity');require(type(qty)is int and 0<qty<=100000,'Cantidad entera positiva requerida.');reason=cleantext(d.get('reason',''),300);require(reason,'Motivo requerido.');w=d.get('warehouse');add_stock(c,p['id'],w,qty,ident,reason)
  result={'product':p,'quantity':qty,'warehouse':w,'at':now(),'reason':reason};c.db.execute('INSERT INTO inventory_entries VALUES(?,?,?,?,?)',(ident,digest,now(),actor,pack(result)));c.audit(actor,'stock_received',{'id':p['id'],'quantity':qty,'warehouse':w});return result
+
+@transaction
+def recurrent_ingress(c,actor,d):
+ user=next((u for u in c.get('users') if u['id']==actor),None)
+ require(user and user['active'] and c.policy(user).get('inventory_view') and c.policy(user).get('product_create'),'Necesitas permisos de inventario e ingreso de mercancía.')
+ ident=d.get('request_id');require(isinstance(ident,str) and len(ident)==36,'Identificador requerido.')
+ key='recurrent-ingress:'+ident;digest=hashlib.sha256(pack(d).encode()).hexdigest();old=c.get(key)
+ if old:
+  require(old['actor']==actor and old['digest']==digest,'Identificador utilizado con otros datos.')
+  return old['result']
+ items=d.get('items');require(isinstance(items,list) and 1<=len(items)<=500,'Agrega entre 1 y 500 productos.')
+ require(all(isinstance(x,dict) and isinstance(x.get('product'),str) for x in items),'Lista inválida.')
+ require(len({x['product'] for x in items})==len(items),'Agrupa cada producto en una sola fila.')
+ require(d.get('warehouse') in WAREHOUSES,'Selecciona un almacén válido.')
+ reason=cleantext(d.get('reason',''),300);require(reason,'Escribe una referencia o motivo del ingreso.')
+ for i,item in enumerate(items):
+  ingress.__wrapped__(c,actor,{'request_id':str(uuid.uuid5(uuid.NAMESPACE_URL,ident+':'+str(i))),'product':item['product'],'quantity':item.get('quantity'),'warehouse':d['warehouse'],'reason':reason})
+ result={'request_id':ident,'count':len(items),'units':sum(x['quantity'] for x in items),'at':now()}
+ c.put(key,{'actor':actor,'digest':digest,'result':result});c.audit(actor,'recurrent_inventory_received',{**result,'warehouse':d['warehouse'],'reason':reason});return result
+
 
 def sale_view(c,id):
  require(not isinstance(id,str) or not id.startswith('SIM-'),'Este folio pertenece al historial simulado para reportes y no admite correcciones. Selecciona una venta manual confirmada.')

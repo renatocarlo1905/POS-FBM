@@ -8,8 +8,8 @@ const ORDER_DEMO={
       "status": "pending",
       "branch": 2,
       "customer": {
-        "name": "Cliente de prueba 01",
-        "phone": "000 000 0001"
+        "name": "Mariana Torres",
+        "phone": "55 0000 0101"
       },
       "created": "2026-09-23T12:00:00-06:00",
       "term": 45,
@@ -62,8 +62,8 @@ const ORDER_DEMO={
       "status": "pending",
       "branch": 1,
       "customer": {
-        "name": "Cliente de prueba 02",
-        "phone": "000 000 0002"
+        "name": "Daniela Ríos",
+        "phone": "55 0000 0102"
       },
       "created": "2026-08-17T12:00:00-06:00",
       "term": 45,
@@ -132,8 +132,8 @@ const ORDER_DEMO={
       "status": "pending",
       "branch": 2,
       "customer": {
-        "name": "Cliente de prueba 03",
-        "phone": "000 000 0003"
+        "name": "Adriana Mendoza",
+        "phone": "55 0000 0103"
       },
       "created": "2026-08-07T12:00:00-06:00",
       "term": 45,
@@ -186,8 +186,8 @@ const ORDER_DEMO={
       "status": "settled",
       "branch": 1,
       "customer": {
-        "name": "Cliente de prueba 04",
-        "phone": "000 000 0004"
+        "name": "Lucía Herrera",
+        "phone": "55 0000 0104"
       },
       "created": "2026-07-28T12:00:00-06:00",
       "term": 45,
@@ -256,8 +256,8 @@ const ORDER_DEMO={
       "status": "delivered",
       "branch": 2,
       "customer": {
-        "name": "Cliente de prueba 05",
-        "phone": "000 000 0005"
+        "name": "Valeria Castro",
+        "phone": "55 0000 0105"
       },
       "created": "2026-09-17T12:00:00-06:00",
       "term": 45,
@@ -339,8 +339,8 @@ const ORDER_DEMO={
       "status": "cancelled",
       "branch": 1,
       "customer": {
-        "name": "Cliente de prueba 06",
-        "phone": "000 000 0006"
+        "name": "Sofía Navarro",
+        "phone": "55 0000 0106"
       },
       "created": "2026-09-21T12:00:00-06:00",
       "term": 45,
@@ -400,8 +400,8 @@ const ORDER_DEMO={
       "status": "released",
       "branch": 2,
       "customer": {
-        "name": "Cliente de prueba 07",
-        "phone": "000 000 0007"
+        "name": "Gabriela Vega",
+        "phone": "55 0000 0107"
       },
       "created": "2026-08-02T12:00:00-06:00",
       "term": 45,
@@ -461,8 +461,8 @@ const ORDER_DEMO={
       "status": "received",
       "branch": 2,
       "customer": {
-        "name": "Cliente de prueba 11",
-        "phone": "000 000 0011"
+        "name": "Elena Salazar",
+        "phone": "55 0000 0108"
       },
       "created": "2026-09-24T12:00:00-06:00",
       "term": 45,
@@ -523,8 +523,8 @@ const ORDER_DEMO={
       "status": "in_repair",
       "branch": 1,
       "customer": {
-        "name": "Cliente de prueba 12",
-        "phone": "000 000 0012"
+        "name": "Patricia Luna",
+        "phone": "55 0000 0109"
       },
       "created": "2026-09-18T12:00:00-06:00",
       "term": 45,
@@ -600,8 +600,8 @@ const ORDER_DEMO={
       "status": "ready",
       "branch": 2,
       "customer": {
-        "name": "Cliente de prueba 13",
-        "phone": "000 000 0013"
+        "name": "Renata Molina",
+        "phone": "55 0000 0110"
       },
       "created": "2026-09-14T12:00:00-06:00",
       "term": 45,
@@ -676,8 +676,8 @@ const ORDER_DEMO={
       "status": "ready",
       "branch": 1,
       "customer": {
-        "name": "Cliente de prueba 14",
-        "phone": "000 000 0014"
+        "name": "Claudia Serrano",
+        "phone": "55 0000 0111"
       },
       "created": "2026-07-18T12:00:00-06:00",
       "term": 45,
@@ -752,8 +752,8 @@ const ORDER_DEMO={
       "status": "delivered",
       "branch": 2,
       "customer": {
-        "name": "Cliente de prueba 15",
-        "phone": "000 000 0015"
+        "name": "Isabel Fuentes",
+        "phone": "55 0000 0112"
       },
       "created": "2026-09-08T12:00:00-06:00",
       "term": 45,
@@ -857,8 +857,8 @@ const ORDER_DEMO={
       "status": "cancelled",
       "branch": 1,
       "customer": {
-        "name": "Cliente de prueba 16",
-        "phone": "000 000 0016"
+        "name": "Camila Ortega",
+        "phone": "55 0000 0113"
       },
       "created": "2026-09-22T12:00:00-06:00",
       "term": 45,
@@ -926,8 +926,8 @@ const ORDER_DEMO={
       "status": "received",
       "branch": 2,
       "customer": {
-        "name": "Cliente de prueba 17",
-        "phone": "000 000 0017"
+        "name": "Alejandra Pineda",
+        "phone": "55 0000 0114"
       },
       "created": "2026-09-17T12:00:00-06:00",
       "term": 45,
@@ -998,4 +998,3 @@ const ORDER_DEMO={
     }
   ]
 };
-if(typeof module!=='undefined')module.exports=ORDER_DEMO;

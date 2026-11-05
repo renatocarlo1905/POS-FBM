@@ -62,7 +62,6 @@ def receipt_pdf(order_id,index,source=None):
    p=doc['payment']
    if p.get('card'):add('Banco: '+p.get('bank','')+' · Últimos dígitos: '+p.get('last4',''))
    if p.get('transfer'):add('Referencia: '+p.get('reference',''))
-   if 'received_cash' in p:add('Efectivo recibido: '+fmt(p['received_cash']));add('Cambio: '+fmt(p['change']))
   add('Pagado a esta fecha: '+fmt(paid));add(('Saldo al cierre, no cobrable: ' if doc['label'] in ('Cancelación','Liberación autorizada') else 'Saldo pendiente: ')+fmt(max(0,budget-paid)),True)
   if order['kind']=='layaway':add('Plazo de pago: '+order['due']+' al final del día.');add('Vendedores originales: '+', '.join(order['sellers']))
   else:

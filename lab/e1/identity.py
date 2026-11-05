@@ -1,5 +1,5 @@
 """Password verification, grants, employees and role policies."""
-import base64, hashlib, hmac, json, secrets, uuid
+import base64, hashlib, hmac, json, secrets, uuid, re
 from domain import RuleError, require, now, pack, cleantext, percent
 from defaults import PERMS
 def hashed(password,salt=None):
@@ -39,6 +39,22 @@ class IdentityService:
         require(not admin or u['role']=='admin','Acceso exclusivo de administrador.');return u
 
     def users(self):return [{**{k:v for k,v in u.items() if k!='password'},'seller_code':'FBV-'+u['id'].upper()} for u in self.get('users')]
+
+    def create_user(self,actor,data):
+        with self.lock:
+            users=self.get('users')
+            administrator=next((u for u in users if u['id']==actor),None)
+            require(administrator and administrator['active'] and administrator['role']=='admin','Solo Administración puede añadir usuarios.')
+            uid=str(data.get('id','')).strip().lower()
+            require(re.fullmatch(r'[a-z0-9][a-z0-9._-]{2,49}',uid),'Usuario: usa de 3 a 50 letras sin acentos, números, puntos, guiones o guiones bajos.')
+            require(not any(u['id'].lower()==uid for u in users),'Ese usuario ya existe.')
+            name=cleantext(data.get('name',''),80);require(name,'El nombre es obligatorio.')
+            role=data.get('role');require(role in self.get('roles'),'Rol inexistente.')
+            bs=data.get('branches');require(isinstance(bs,list) and bs and all(type(b)is int and b in (1,2) for b in bs),'Selecciona al menos una sucursal válida.')
+            password=data.get('password');require(isinstance(password,str) and 8<=len(password)<=128,'La contraseña debe tener 8 a 128 caracteres.')
+            u={'id':uid,'name':name,'email':cleantext(data.get('email',''),120),'phone':cleantext(data.get('phone',''),30),'role':role,'branches':sorted(set(bs)),'active':True,'revision':1,'password':hashed(password)}
+            users.append(u);self.put('users',users);self.audit(actor,'employee_created',{'id':uid,'role':role,'branches':u['branches']})
+            return {'id':uid}
 
     def edit_user(self,actor,data):
         with self.lock:

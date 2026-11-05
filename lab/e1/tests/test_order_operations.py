@@ -90,5 +90,34 @@ class Orders(unittest.TestCase):
   self.runorder({'action':'cancel','id':o['id'],'revision':1,'items':[{'id':'p1','qty':1}],'amount':'600','cash':'600','sellers':['carlo'],'reason':'Compra inmediata por conversión'})
   self.assertEqual(next(p for p in self.c.catalog() if p['id']=='p1')['available'],0)
   self.assertEqual(len(orders.all_orders(self.c)),1)
+
+ def test_order_payments_require_exact_amount(self):
+  o=self.create()
+  for cash in ('199.99','250'):
+   with self.assertRaises(RuleError):self.runorder({'action':'pay','id':o['id'],'revision':o['revision'],'amount':'200','cash':cash})
+  self.assertEqual(orders.get(self.c,o['id'])['revision'],o['revision'])
+  self.runorder({'action':'pay','id':o['id'],'revision':o['revision'],'amount':'200','cash':'100','card':'100','bank':'BBVA','last4':'1234'})
+  o=orders.get(self.c,o['id']);self.assertEqual(o['payments'][-1]['change'],0)
+  pdf=orders_preview.receipt_pdf(o['id'],1,o['documents'][1]['order'])[0]
+  self.assertNotIn('Cambio:', ''.join(p.extract_text() for p in PdfReader(io.BytesIO(pdf)).pages))
+  r=self.create('repair');self.runorder({'action':'state','id':r['id'],'revision':r['revision'],'status':'ready','reason':'Terminada'},branch=0)
+  r=orders.get(self.c,r['id'])
+  with self.assertRaises(RuleError):self.runorder({'action':'pay','id':r['id'],'revision':r['revision'],'amount':'400','cash':'500'})
+  self.runorder({'action':'pay','id':r['id'],'revision':r['revision'],'amount':'400','cash':'400'})
+  self.assertEqual(orders.balance(orders.get(self.c,r['id'])),0)
+
+ def test_dashboard_actions_choose_branch_and_keep_cash(self):
+  o=self.create()
+  payload={'action':'pay','id':o['id'],'revision':1,'amount':'600','cash':'600'}
+  with self.assertRaises(RuleError):self.runorder(payload,branch=0)
+  with self.assertRaises(RuleError):self.runorder({**payload,'operation_branch':2},self.staff,0)
+  self.runorder({**payload,'operation_branch':2},branch=0)
+  o=orders.get(self.c,o['id']);self.assertEqual(o['payments'][-1]['branch'],2);self.assertEqual(o['payments'][-1]['session'],self.b.operations()[0]['id'])
+  self.runorder({'action':'deliver','id':o['id'],'revision':2,'confirmed':True,'operation_branch':1},branch=0)
+  self.assertEqual(orders.get(self.c,o['id'])['delivery']['branch'],1)
+  other=self.create()
+  self.runorder({'action':'cancel','id':other['id'],'revision':1,'operation_branch':2,'items':[{'id':'p3','qty':1}],'amount':'250','cash':'250','sellers':['carlo'],'reason':'Otra pieza'},branch=0)
+  other=orders.get(self.c,other['id']);self.assertEqual(other['status'],'cancelled');self.assertEqual(other['conversion_payment']['branch'],2)
+
 del Lab
 if __name__=='__main__':unittest.main()

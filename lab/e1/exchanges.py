@@ -85,7 +85,7 @@ def preview(c,uid,branch,d):
   if not x.get('non_inventory'):catalog[x['id']]['available']+=x['qty']
  raw=d.get('sale',{});cash=money(raw.get('cash',0));policy=c.policy(u)
  new=calc_sale({**raw,'cash':str((cash+credit)/100)},catalog,policy,c.get('categories',[]));require(new['total']>=credit,'La mercancía nueva debe valer igual o más que las piezas recibidas, después del descuento.')
- difference=new['total']-credit;require(new['card']+new['transfer']<=difference,'Los pagos electrónicos no pueden superar la diferencia.');require(cash+new['card']+new['transfer']>=difference,'Falta cubrir la diferencia.')
+ difference=new['total']-credit;require(new['card']+new['transfer']<=difference,'Los pagos electrónicos no pueden superar la diferencia.');require(cash+new['card']+new['transfer']==difference,'Error: ingresa el importe exacto de la diferencia.')
  require(all(x.get('non_inventory') or x['qty']<=catalog[x['id']]['available'] for x in new['items']),'Existencias insuficientes.')
  sellers=raw.get('sellers',[]);active={x['id'] for x in c.get('users') if x['active']};require(isinstance(sellers,list) and sellers and len(set(sellers))==len(sellers) and all(x in active for x in sellers),'Selecciona vendedores válidos.')
  attribution=[{'sellers':list(k),'amount':n} for k,n in alloc.items() if n]
@@ -125,3 +125,6 @@ def alerts(c):return [{'id':d['id'],'short_code':d.get('short_code',d['id']),'ta
 def receipt(c,key):
  d=next((d for d in documents(c) if key in (d['id'],d['out']['id'],d['return']['id'])),None);require(d,'Comprobante de cambio inexistente.')
  return {'id':d['id'],'short_code':d.get('short_code',d['id']),'kind':'exchange','at':d['at'],'branch':d['branch'],'actor_name':d['actor_name'],'payload':d,'template':d['template']}
+
+def receipt_events(c,branch):
+ return [{'id':d['id'],'short_code':d['short_code'],'kind':'exchange','status':'accepted','at':d['at'],'branch':d['branch'],'actor_name':d['actor_name'],'payload':{'total':d['difference'],'amount':d['difference'],'reason':'Diferencia cobrada · Origen '+d.get('target_code',d['target']),**{k:d['new'][k] for k in ('cash','card','transfer')}}} for d in documents(c) if d['branch']==branch]

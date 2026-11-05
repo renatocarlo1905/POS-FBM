@@ -17,11 +17,11 @@ class SynchronizationService:
         self.db.execute('BEGIN IMMEDIATE')
         try:
             self.db.executemany('UPDATE operations SET status=?,issue=? WHERE id=?',acknowledgements)
-            self.put('catalog',pull['catalog']);self.put('template',pull['template']);self.put('last_sync',pull['at']);self.put('cash_adjustments',pull['cash_adjustments']);self.put('corrections',pull['corrections']);self.put('staff',pull['staff']);self.put('catalog_meta',pull['meta']);self.put('order_cash_moves',pull.get('order_cash_moves',[]));self.put('exchange_moves',pull.get('exchange_moves',[]))
+            self.put('catalog',pull['catalog']);self.put('template',pull['template']);self.put('last_sync',pull['at']);self.put('cash_adjustments',pull['cash_adjustments']);self.put('corrections',pull['corrections']);self.put('staff',pull['staff']);self.put('catalog_meta',pull['meta']);self.put('order_cash_moves',pull.get('order_cash_moves',[]));self.put('exchange_moves',pull.get('exchange_moves',[]));self.put('exchange_receipts',pull.get('exchange_receipts',[]))
             self.db.execute('COMMIT')
         except Exception:self.db.execute('ROLLBACK');raise
         if pull['relogin']:
             # Role/password changes refresh permissions but require password authentication again.
             del creds[uid];self.put('credentials',creds);raise RuleError('Tu acceso cambió. Inicia sesión otra vez conectado.')
         c.update(grant=pull['grant'],snapshot=pull['snapshot']);self.put('credentials',creds)
-        self.put('catalog',pull['catalog']);self.put('template',pull['template']);self.put('last_sync',pull['at']);self.put('cash_adjustments',pull['cash_adjustments']);self.put('corrections',pull['corrections']);self.put('staff',pull['staff']);self.put('catalog_meta',pull['meta']);self.put('order_cash_moves',pull.get('order_cash_moves',[]));self.put('exchange_moves',pull.get('exchange_moves',[]));self.copy()
+        self.put('catalog',pull['catalog']);self.put('template',pull['template']);self.put('last_sync',pull['at']);self.put('cash_adjustments',pull['cash_adjustments']);self.put('corrections',pull['corrections']);self.put('staff',pull['staff']);self.put('catalog_meta',pull['meta']);self.put('order_cash_moves',pull.get('order_cash_moves',[]));self.put('exchange_moves',pull.get('exchange_moves',[]));self.put('exchange_receipts',pull.get('exchange_receipts',[]));self.copy()

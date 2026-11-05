@@ -18,6 +18,17 @@ def init(c):
    o.update(simulated=True,revision=1,documents=[],credit_issued=0)
    c.db.execute('INSERT INTO service_orders VALUES(?,?) ON CONFLICT DO NOTHING',(o['id'],pack(o)))
   c.put('orders_seed_v1',True)
+ # Replace only untouched generic customers in the isolated sample history.
+ if not c.get('orders_customer_labels_v1'):
+  fixtures={o['id']:o['customer'] for o in json.loads((Path(__file__).parent/'orders_demo.json').read_text())['rows']}
+  originals=[]
+  for row in c.db.execute('SELECT body FROM service_orders'):
+   o=json.loads(row[0])
+   if o.get('simulated') and o['id'] in fixtures and o.get('customer',{}).get('name','').startswith('Cliente de prueba '):
+    originals.append(copy.deepcopy(o));o['customer']=fixtures[o['id']]
+    c.db.execute('UPDATE service_orders SET body=? WHERE id=?',(pack(o),o['id']))
+  c.put('orders_customer_labels_backup_v1',originals)
+  c.put('orders_customer_labels_v1',True)
 def all_orders(c):return [__import__('simulated').order_code(c,json.loads(r[0])) for r in c.db.execute('SELECT body FROM service_orders')]
 def get(c,key):
  r=c.db.execute('SELECT body FROM service_orders WHERE id=?',(key,)).fetchone();require(r,'Orden inexistente.');return __import__('simulated').order_code(c,json.loads(r[0]))
@@ -32,7 +43,8 @@ def movements(c,branch=None):
  return [{**p,'order':o['id']} for o in all_orders(c) if not o.get('simulated') for p in o['payments']+([o['conversion_payment']] if o.get('conversion_payment') else []) if not branch or p['branch']==branch]
 def adjustments(c,branch):
  result={}
- for p in movements(c,branch):result[p['session']]=result.get(p['session'],0)+p['cash']
+ for p in movements(c,branch):
+  if p.get('session'):result[p['session']]=result.get(p['session'],0)+p['cash']
  return result
 
 def sale_events(c):
@@ -75,7 +87,7 @@ def payment(c,o,u,branch,d,at,minimum=1):
  events=[json.loads(r['body']) for r in c.events(branch) if r['status']=='accepted'];session=cash_state(events);require(session,'Abre caja antes de cobrar.')
  amount=money(d.get('amount'));require(minimum<=amount<=balance(o),'Importe fuera del anticipo mínimo o saldo pendiente.')
  if o['kind']=='repair' and o['payments']:require(o['status']=='ready','La reparación debe estar lista para liquidarla al recoger.');require(amount==balance(o),'Las reparaciones solo admiten anticipo y liquidación final.')
- cash=money(d.get('cash',0));card=money(d.get('card',0));transfer=money(d.get('transfer',0));credit=money(d.get('credit',0));require(card+transfer+credit<=amount and cash+card+transfer+credit>=amount,'Pago insuficiente o cambio no originado en efectivo.')
+ cash=money(d.get('cash',0));card=money(d.get('card',0));transfer=money(d.get('transfer',0));credit=money(d.get('credit',0));require(cash+card+transfer+credit==amount,'Los medios de pago deben sumar exactamente el importe a aplicar.')
  bank=text(d,'bank',80,False);last4=text(d,'last4',4,False);reference=text(d,'reference',100,False)
  require(not card or bank and len(last4)==4 and last4.isascii() and last4.isdigit(),'Completa banco y últimos cuatro dígitos.');require(not transfer or reference,'Referencia de transferencia obligatoria.')
  if credit:
@@ -87,6 +99,9 @@ def payment(c,o,u,branch,d,at,minimum=1):
 
 def execute(c,u,branch,d):
  require(u['role']=='admin' or c.policy(u).get('orders',c.policy(u).get('sell')),'Sin permiso para gestionar órdenes.')
+ if branch==0 and d.get('action') in ('pay','cancel','deliver'):
+  require(u['role']=='admin','Operación del dashboard exclusiva del administrador.')
+  branch=d.get('operation_branch');require(type(branch)is int and branch in (1,2) and branch in u['branches'],'Selecciona una sucursal autorizada para el movimiento.')
  try:uuid.UUID(d.get('request_id',''))
  except (ValueError,TypeError):raise RuleError('Identificador de petición inválido.')
  digest=hashlib.sha256(pack({'user':u['id'],'branch':branch,'data':d}).encode()).hexdigest()

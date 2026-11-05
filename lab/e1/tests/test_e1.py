@@ -63,6 +63,8 @@ class Lab(unittest.TestCase):
   self.opening();sale=self.sale(self.a,self.ta)['id'];original=self.c.db.execute('SELECT body FROM events WHERE id=?',(sale,)).fetchone()[0]
   closed=self.op(self.a,self.ta,'close',{'counted':'1500','fund':'500','envelope':'1000'})['id'];close_body=self.c.db.execute('SELECT body FROM events WHERE id=?',(closed,)).fetchone()[0]
   session=self.b.state(self.tb)['session']['id'];d={'target':sale,'session':session,'request_id':str(uuid.uuid4()),'returned':[{'id':'p1','qty':1}],'condition':True,'reason':'Prefiere otra pieza','sale':{'items':[{'id':'p4','qty':1}],'cash':'200','card':'300','bank':'Prueba','last4':'1234','sellers':['melissa']}}
+  for cash in ('199','201'):
+   with self.assertRaises(RuleError):ex.preview(self.c,'carlo',2,{**d,'sale':{**d['sale'],'cash':cash}})
   later=(datetime.fromisoformat(json.loads(original)['at'])+timedelta(days=2)).isoformat()
   with patch('exchanges.now',return_value=later):
    r=ex.confirm(self.c,'carlo',2,d);self.assertEqual(ex.confirm(self.c,'carlo',2,d)['id'],r['id'])
@@ -73,9 +75,13 @@ class Lab(unittest.TestCase):
   self.assertEqual(next(p for p in self.c.catalog() if p['id']=='p1')['available'],8)
   with self.assertRaises(RuleError):ext.correct(self.c,'carlo',0,self.correction('cancel',sale))
   self.b.sync('melissa');self.assertEqual(ext.cash_adjustments(self.c,2)[session],20000)
+  for _ in range(2):
+   receipts=[e for e in self.b.state(self.tb)['operations'] if e['kind']=='exchange'];self.assertEqual(len(receipts),1);self.assertEqual(receipts[0]['id'],r['id']);self.assertEqual(receipts[0]['payload']['total'],50000)
+  self.assertFalse(any(e['kind']=='exchange' for e in self.a.state(self.ta)['operations']))
+  self.b.put('offline',True);self.assertTrue(any(e['id']==r['id'] for e in self.b.state(self.tb)['operations']));self.b.put('offline',False)
   cash_reports.init(self.c);row=next(r for r in cash_reports.report(self.c) if r['id']==session);self.assertEqual(row['expected'],70000)
   self.op(self.b,self.tb,'close',{'counted':'700','fund':'500','envelope':'200'});self.assertEqual(self.b.operations()[-1]['payload']['difference'],0)
-  text=' '.join(p.extract_text() for p in PdfReader(io.BytesIO(receipt_pdf(ex.receipt(self.c,r['id'])))).pages);self.assertIn('CAMBIO DE MERCANC',text)
+  text=' '.join(p.extract_text() for p in PdfReader(io.BytesIO(receipt_pdf(ex.receipt(self.c,r['id'])))).pages);self.assertIn('CAMBIO DE MERCANC',text);self.assertNotIn('Cambio:',text);self.assertNotIn('Efectivo recibido:',text)
  def test_29_exchange_99_notification_and_guards(self):
   import exchanges as ex
   from unittest.mock import patch

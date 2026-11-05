@@ -1,0 +1,27 @@
+'use strict';
+let inventoryImportDraft=null,inventoryImportPreview=null,inventoryImportPage=0;
+const inventoryTemplateUrl='https://docs.google.com/spreadsheets/d/1tGStyA0-kjpxpGFFLD01Lf4iDzMoy0v1v6L4Sux4dXo/edit';
+actions['inventory-import']=()=>{
+ inventoryImportDraft=null;inventoryImportPreview=null;inventoryImportPage=0;
+ modal('Importar productos nuevos',form('inventory-import-preview',`<p>Llena la plantilla en Google Sheets y descárgala como Microsoft Excel (.xlsx).</p><div class="actions"><a class="import-template-link" href="${inventoryTemplateUrl}" target="_blank" rel="noopener">Abrir plantilla en Google Sheets ↗</a></div><p>Una fila por producto nuevo. Se cargan todas las filas con datos; las filas vacías se omiten.</p>${field('reference','Referencia de recepción','','text','required maxlength="100" placeholder="Factura, remisión o referencia única"')}<label>Archivo de productos<input id="inventory-import-file" type="file" accept=".xlsx,.csv,.tsv" required></label><p class="muted">Hasta 500 filas y 450 KB. Esta carga no agrega unidades a productos existentes. Los códigos nuevos se asignan al confirmar. Para precio por fórmula, selecciona base, multiplicador y terminación; el precio se calcula al revisar.</p>`,'Revisar archivo'));
+};
+function importFile(file){return new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result).split(',')[1]);reader.onerror=()=>reject(Error('No se pudo leer el archivo.'));reader.readAsDataURL(file);});}
+extraForms['inventory-import-preview']=async(f,d)=>{
+ const file=$('#inventory-import-file').files[0];if(!file)throw Error('Selecciona un archivo.');if(file.size>450000)throw Error('El archivo supera 450 KB. Divide la carga en archivos más pequeños.');
+ inventoryImportDraft={reference:d.reference,filename:file.name,content:await importFile(file)};
+ const result=await api('inventory-import-preview',inventoryImportDraft);
+ if(result.already_imported){showInventoryImportResult(result.result,true);return;}
+ inventoryImportPreview=result;inventoryImportDraft.preview_hash=result.preview_hash;inventoryImportPage=0;showInventoryImportPreview();
+};
+function showInventoryImportPreview(){
+ const r=inventoryImportPreview,start=inventoryImportPage*50,rows=r.rows.slice(start,start+50);
+ modal('Revisar productos nuevos',`<p><strong>${esc(r.reference)}</strong></p><div class="sum"><span>Productos válidos / unidades</span><strong>${r.count} / ${r.units}</strong></div><div class="sum"><span>Costo de la recepción</span><strong>${money(r.cost_total)}</strong></div>${r.errors.length?notice(`Hay ${r.errors.length} fila(s) con errores. No se guardará ningún producto hasta corregirlas.`)+`<div class="import-errors"><ul>${r.errors.map(e=>`<li><strong>Fila ${e.row}:</strong> ${esc(e.message)}</li>`).join('')}</ul></div>`:notice('Al confirmar se crearán los productos y sus existencias iniciales.',true)}<div class="table-wrap import-preview-table"><table><thead><tr><th>Fila / producto</th><th>Material / categoría</th><th>Proveedor / almacén</th><th>Precio / costo</th><th>Unidades</th></tr></thead><tbody>${rows.map(row=>`<tr><td><small>Fila ${row.row}</small><strong>${esc(row.product.name)}</strong><small>${esc(row.product.description)}</small></td><td>${esc(row.material)}<small>${esc(row.category)}</small></td><td>${esc(row.provider_name)}<small>${esc(row.warehouse_name)}</small></td><td>${money(Math.round(Number(row.product.price)*100))}${!branch&&row.product.price_mode==='formula'?`<small>${esc(productRuleLabel({price_mode:'formula',price_rule:{base:row.product.price_base,multiplier:row.product.price_multiplier,ending:row.product.price_ending}}))}</small>`:''}<small>${money(Math.round(Number(row.product.cost)*100))}</small></td><td>${row.product.quantity}</td></tr>`).join('')}</tbody></table></div>${r.count>50?`<div class="actions">${button('import-page','Anterior',`data-page="${inventoryImportPage-1}" ${inventoryImportPage===0?'disabled':''}`)}<span>${start+1}–${Math.min(start+50,r.count)} de ${r.count}</span>${button('import-page','Siguiente',`data-page="${inventoryImportPage+1}" ${start+50>=r.count?'disabled':''}`)}</div>`:''}<div class="actions">${button('inventory-import','Elegir otro archivo')}${button('close','Cerrar')}${!r.errors.length&&r.count?button('inventory-import-confirm',`Importar ${r.count} productos`,'','primary'):''}</div>`);
+}
+actions['import-page']=b=>{inventoryImportPage=Number(b.dataset.page);showInventoryImportPreview();};
+function showInventoryImportResult(result,duplicate=false){
+ modal(duplicate?'Recepción ya registrada':'Productos importados',`<p><strong>${esc(result.reference)}</strong></p><p>${duplicate?'Esta recepción ya estaba guardada. No se duplicaron productos ni unidades.':`Se crearon ${result.count} productos con ${result.units} unidades iniciales.`}</p><div class="table-wrap import-preview-table"><table><thead><tr><th>Producto</th><th>Código asignado</th><th>Unidades</th></tr></thead><tbody>${result.products.map(p=>`<tr><td>${esc(p.name)}</td><td>${esc(p.code)}</td><td>${p.quantity}</td></tr>`).join('')}</tbody></table></div><div class="actions">${button('close','Aceptar','','primary')}</div>`);
+}
+actions['inventory-import-confirm']=async()=>{
+ if(!inventoryImportDraft?.preview_hash)throw Error('Revisa primero el archivo.');
+ const result=await api('inventory-import-confirm',inventoryImportDraft);inventoryImportDraft=null;inventoryImportPreview=null;await refresh();showInventoryImportResult(result,result.duplicate);
+};

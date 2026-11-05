@@ -17,6 +17,13 @@ from receipts import template, receipt_pdf
 from defaults import PERMS
 
 STATIC=Path(__file__).parent/'static'
+def branch_response(value):
+    """Pricing rules are only disclosed by the authenticated admin dashboard."""
+    private={'price_rule','price_mode','price_base','price_multiplier','price_ending'}
+    if isinstance(value,dict):return {k:branch_response(v) for k,v in value.items() if k not in private}
+    if isinstance(value,list):return [branch_response(v) for v in value]
+    return value
+
 class Application:
     def __init__(self,data,port,pg_config=None):
         self.data=Path(data);self.data.mkdir(parents=True,exist_ok=True);os.chmod(self.data,0o700)
@@ -34,6 +41,7 @@ class Application:
         class Handler(BaseHTTPRequestHandler):
             def log_message(self,*args):pass
             def reply(self,value,status=200,ctype='application/json',filename=None):
+                if branch and ctype=='application/json':value=branch_response(value)
                 body=pack(value).encode() if ctype=='application/json' else value
                 self.send_response(status);self.send_header('Content-Type',ctype);self.send_header('Content-Length',str(len(body)));self.send_header('Cache-Control','no-store');self.send_header('X-Content-Type-Options','nosniff')
                 self.send_header('Content-Security-Policy',"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; object-src 'none'; frame-ancestors 'none'; base-uri 'none'")
@@ -58,11 +66,17 @@ class Application:
                         length=int(self.headers.get('Content-Length',0));require(0<length<700000,'Tamaño inválido.');data=json.loads(self.rfile.read(length));require(isinstance(data,dict),'Formato inválido.')
                     def manage(uid,origin,route,payload):
                         u=next(u for u in app.central.get('users') if u['id']==uid);policy=app.central.policy(u)
-                        if route=='product-edit':
+                        if route in ('inventory-import-preview','inventory-import-confirm'):
+                            import inventory_import
+                            result=(inventory_import.preview if route=='inventory-import-preview' else inventory_import.confirm)(app.central,uid,payload)
+                        elif route=='recurrent-ingress':result=ext.recurrent_ingress(app.central,uid,payload)
+                        elif route=='product-edit':
                             require(origin==0 and u['role']=='admin','Edición disponible solo en Administración.')
                             require(all(not store.get('offline') and not any(r['status']=='pending' for r in store.rows()) for store in app.stores.values()),'Conecta y sincroniza ambos POS antes de editar productos.')
                             result=ext.edit_product(app.central,uid,payload)
-                        elif route in ('product','ingress','provider','category','category-edit','category-delete'):
+                        elif route=='provider':
+                            require(origin==0,'Los proveedores se administran desde el dashboard.');result=ext.provider(app.central,uid,payload)
+                        elif route in ('product','ingress','category','category-edit','category-delete'):
                             require(policy.get('product_create'),'Sin permiso para ingresar productos.');result={'product':ext.create_product,'ingress':ext.ingress,'provider':ext.provider,'category':ext.create_category,'category-edit':ext.edit_category,'category-delete':ext.delete_category}[route](app.central,uid,payload)
                         elif route=='exchange-search':result=exchanges.lookup(app.central,uid,payload.get('query',''))
                         elif route=='exchange-view':result=exchanges.view(app.central,uid,payload.get('target'))
@@ -76,7 +90,7 @@ class Application:
                         elif route=='correction-preview':result=ext.correction_preview(app.central,uid,origin,payload)
                         elif route=='correction':result=ext.correct(app.central,uid,origin,payload)
                         else:raise RuleError('Acción desconocida.')
-                        if route!='correction-view':app.central.backup(app.data/'backups/central.sqlite3')
+                        if route not in ('correction-view','inventory-import-preview'):app.central.backup(app.data/'backups/central.sqlite3')
                         return result
                     if path.startswith('/download/') and not post:
                         item=app.downloads.pop(path.rsplit('/',1)[-1],None);require(item and item[0]>time.time() and item[1]==branch,'Descarga vencida. Genera el PDF de nuevo.');return self.reply(item[2],ctype=item[4] if len(item)>4 else 'application/pdf',filename=item[3])
@@ -107,7 +121,11 @@ class Application:
                                 sessions=app.central.get('sessions');sessions.pop(token,None);app.central.put('sessions',sessions)
                         return self.reply({'ok':True})
                     if path in ('/api/orders','/api/order-write','/api/order-pdf'):
-                        with (app.stores[branch].lock if branch else nullcontext()):
+                        target_branch=branch or (data.get('operation_branch') if post and path=='/api/order-write' and data.get('action') in ('pay','cancel','deliver') else None)
+                        target_store=app.stores.get(target_branch) if type(target_branch)is int else None
+                        with (target_store.lock if target_store else nullcontext()):
+                            if not branch and target_store:
+                                require(not target_store.get('offline') and not any(r['status']=='pending' for r in target_store.rows()),'Conecta y sincroniza la sucursal seleccionada antes de registrar el movimiento.')
                             if branch:
                                 store=app.stores[branch]
                                 with store.lock:
@@ -160,9 +178,9 @@ class Application:
                                 if path=='/api/offline' and post:
                                     require(type(data.get('offline'))is bool,'Estado inválido.');store.put('offline',data['offline']);return self.reply({'ok':True})
                                 if path=='/api/operation' and post:return self.reply(store.submit(token,data.get('kind'),data.get('data',{}),data.get('request_id')))
-                                if path in ('/api/product','/api/ingress','/api/provider','/api/category','/api/category-edit','/api/category-delete','/api/correction-view','/api/correction-preview','/api/correction','/api/exchange-search','/api/exchange-view','/api/exchange-preview','/api/exchange-confirm') and post:
+                                if path in ('/api/recurrent-ingress','/api/inventory-import-preview','/api/inventory-import-confirm','/api/product','/api/ingress','/api/provider','/api/category','/api/category-edit','/api/category-delete','/api/correction-view','/api/correction-preview','/api/correction','/api/exchange-search','/api/exchange-view','/api/exchange-preview','/api/exchange-confirm') and post:
                                     require(not store.get('offline'),'Esta operación requiere conexión.');store.sync(uid);uid,c=store.auth(token);result=store.transport('manage',{'grant':c['grant'],'route':path.rsplit('/',1)[-1],'data':data})
-                                    if path!='/api/correction-view':store.sync(uid)
+                                    if path not in ('/api/correction-view','/api/inventory-import-preview'):store.sync(uid)
                                     return self.reply(result)
                                 if path=='/api/pdf' and post:
                                     require(c['snapshot']['policy'].get('receipts') and c['snapshot']['policy'].get('reprint'),'Sin permiso para consultar o descargar comprobantes.')
@@ -208,9 +226,10 @@ class Application:
                                     for r in reversed(app.central.events()):
                                         e=json.loads(r['body']);e.pop('grant');e.pop('input');e['payload'].pop('request',None);events.append({**e,'status':r['status'],'issue':r['issue'],'received_at':r['received'],**({'adjusted':ext.sale_view(app.central,e['id'])['adjusted']} if e['kind']=='sale' and r['status']=='accepted' else {})})
                                     events.extend(exchanges.events(app.central));events.extend(simulated.sales(app.central));events.extend(orders.sale_events(app.central));events.extend(orders.collection_events(app.central));events.sort(key=lambda e:e['at'],reverse=True)
-                                    return self.reply({'exchange_alerts':exchanges.alerts(app.central),'user':u['name'],'users':app.central.users(),'roles':app.central.get('roles'),'permissions':PERMS,'catalog':app.central.catalog(True),'templates':app.central.get('templates'),'operations':[__import__('folios').decorate(app.central,e) for e in events],'audit':[dict(r) for r in app.central.db.execute('SELECT * FROM audit ORDER BY id DESC LIMIT 30')],'at':now(),'corrections':ext.corrections(app.central),'materials':app.central.get('materials'),'types':app.central.get('types'),'categories':app.central.get('categories',[]),'providers':app.central.get('providers'),'warehouses':ext.WAREHOUSES,'inventory_entries':[dict(r) for r in app.central.db.execute('SELECT * FROM inventory_entries ORDER BY at DESC LIMIT 50')]})
-                                if path in ('/api/product-edit','/api/product','/api/ingress','/api/provider','/api/category','/api/category-edit','/api/category-delete','/api/correction-view','/api/correction-preview','/api/correction','/api/exchange-search','/api/exchange-view','/api/exchange-preview','/api/exchange-confirm') and post:return self.reply(manage(actor,0,path.rsplit('/',1)[-1],data))
-                                if path=='/api/employee' and post:app.central.edit_user(actor,data)
+                                    return self.reply({'exchange_alerts':exchanges.alerts(app.central),'user':u['name'],'user_id':u['id'],'users':app.central.users(),'roles':app.central.get('roles'),'permissions':PERMS,'catalog':app.central.catalog(True),'templates':app.central.get('templates'),'operations':[__import__('folios').decorate(app.central,e) for e in events],'audit':[dict(r) for r in app.central.db.execute('SELECT * FROM audit ORDER BY id DESC LIMIT 30')],'at':now(),'corrections':ext.corrections(app.central),'materials':app.central.get('materials'),'types':app.central.get('types'),'categories':app.central.get('categories',[]),'providers':app.central.get('providers'),'warehouses':ext.WAREHOUSES,'inventory_entries':[dict(r) for r in app.central.db.execute('SELECT * FROM inventory_entries ORDER BY at DESC LIMIT 50')]})
+                                if path in ('/api/recurrent-ingress','/api/inventory-import-preview','/api/inventory-import-confirm','/api/product-edit','/api/product','/api/ingress','/api/provider','/api/category','/api/category-edit','/api/category-delete','/api/correction-view','/api/correction-preview','/api/correction','/api/exchange-search','/api/exchange-view','/api/exchange-preview','/api/exchange-confirm') and post:return self.reply(manage(actor,0,path.rsplit('/',1)[-1],data))
+                                if path=='/api/employee-create' and post:app.central.create_user(actor,data)
+                                elif path=='/api/employee' and post:app.central.edit_user(actor,data)
                                 elif path=='/api/role' and post:app.central.edit_role(actor,data)
                                 elif path=='/api/template' and post:
                                     b=str(data.get('branch'));require(b in ('1','2'),'Sucursal inválida.');templates=app.central.get('templates');templates[b]=template(data);app.central.put('templates',templates);app.central.audit(actor,'template_updated',{'branch':b})
@@ -232,7 +251,7 @@ class Application:
                     require(not post,'Ruta no disponible.')
                     entry='dashboard.html' if branch==0 else f'sucursal-{branch}.html'
                     name=entry if path=='/' else path.lstrip('/')
-                    require(name in (entry,'receipt-view.html','receipt-view.js','receipt-view.css','brand-symbol.png','brand-name.png','app.js','exchanges.js','extra.js','cash-reports.js','sales-model.js','sales-reports.js','orders-demo.js','orders-model.js','orders.js','styles.css','company-logo.png','Montserrat-Regular.ttf','Montserrat-Bold.ttf'),'Archivo no disponible.')
+                    require(name in (entry,'receipt-view.html','receipt-view.js','receipt-view.css','brand-symbol.png','brand-name.png','app.js','autocomplete.js','recurrent-inventory.js','inventory-import.js','exchanges.js','extra.js','cash-reports.js','sales-model.js','sales-reports.js','orders-demo.js','orders-model.js','orders.js','styles.css','company-logo.png','Montserrat-Regular.ttf','Montserrat-Bold.ttf'),'Archivo no disponible.')
                     ctype='image/png' if name.endswith('.png') else 'font/ttf' if name.endswith('.ttf') else 'text/html; charset=utf-8' if name.endswith('.html') else 'text/css; charset=utf-8' if name.endswith('.css') else 'text/javascript; charset=utf-8'
                     return self.reply((STATIC/name).read_bytes(),ctype=ctype)
                 except RuleError as e:self.reply({'error':str(e)},400)

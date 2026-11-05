@@ -2,7 +2,7 @@
 import io,json
 from datetime import datetime
 from pathlib import Path
-from core import require
+from domain import require
 ROOT=Path(__file__).parent
 
 def receipts(order):
@@ -10,6 +10,8 @@ def receipts(order):
  result=[{'id':p['id'],'label':p['kind'],'at':p['at'],'copies':['Cliente','Negocio'] if order['kind']=='repair' and i else copies,'payment':p} for i,p in enumerate(order['payments'])]
  if order['delivery']:result.append({'id':order['delivery']['receipt'],'label':'Entrega','at':order['delivery']['at'],'copies':['Cliente','Negocio']})
  if order['status'] in ('cancelled','released'):result.append({'id':order['id']+'-CIERRE','label':'Cancelación' if order['status']=='cancelled' else 'Liberación autorizada','at':order['history'][-1]['at'],'copies':['Cliente','Local'] if order['kind']=='layaway' else ['Registro interno']})
+ if order.get('short_code'):
+  for i,d in enumerate(result):d['short_code']=order['short_code']+'-'+str(i+1).zfill(2)
  return result
 
 def document(order_id,index):
@@ -24,7 +26,7 @@ def receipt_pdf(order_id,index,source=None):
  from reportlab.lib.colors import HexColor
  order,doc=document(order_id,index) if source is None else (source,receipts(source)[index])
  registerFont(TTFont('OrderSans',str(ROOT/'static/Montserrat-Regular.ttf')));registerFont(TTFont('OrderBold',str(ROOT/'static/Montserrat-Bold.ttf')))
- buffer=io.BytesIO();canvas=Canvas(buffer);canvas.setTitle('SIMULADO - '+doc['id']);width=80*72/25.4;margin=14;usable=width-margin*2
+ buffer=io.BytesIO();canvas=Canvas(buffer);canvas.setTitle('SIMULADO - '+doc.get('short_code',doc['id']));width=80*72/25.4;margin=14;usable=width-margin*2
  fmt=lambda v:f'${v/100:,.2f} MXN'
  paid=sum(p['amount'] for p in order['payments'] if p['at']<=doc['at'])-order.get('credit_issued',0);budget=order['total']
  if order['kind']=='repair':budget=[b['after'] for b in order['budget_history'] if b['at']<=doc['at']][-1]
@@ -46,7 +48,7 @@ def receipt_pdf(order_id,index,source=None):
     lines.append((current,font,size))
   add('FRIDA BLANCAS MÉXICO',True);add('Joyería Artesanal');add('SIMULADO - SIN VALIDEZ OPERATIVA' if order.get('simulated',True) else 'LABORATORIO - OPERACIÓN DE PRUEBA',True);add('Copia: '+copy,True)
   add(('APARTADO' if order['kind']=='layaway' else 'REPARACIÓN')+' - '+doc['label'].upper(),True)
-  add('Folio: '+doc['id']);add('Orden: '+order['id']);add(datetime.fromisoformat(doc['at']).strftime('%d/%m/%Y %H:%M')+' · Ciudad de México')
+  add('Folio: '+doc.get('short_code',doc['id']));add('Orden: '+order.get('short_code',order['id']));add(datetime.fromisoformat(doc['at']).strftime('%d/%m/%Y %H:%M')+' · Ciudad de México')
   event=doc.get('payment') or order['delivery'] or {'branch':order['branch'],'actor':order['history'][-1]['actor']}
   add('Sucursal del movimiento: '+str(event['branch']));add('Atendió: '+event['actor']);add('Sucursal de registro: '+str(order['branch']))
   add('');add('Cliente: '+order['customer']['name']);add('Teléfono: '+order['customer']['phone']);add('PIEZAS',True)
@@ -83,4 +85,4 @@ def receipt_pdf(order_id,index,source=None):
   for text,font,size in lines:
    canvas.setFillColor(HexColor('#434345'));canvas.setFont(font,size);canvas.drawString(margin,y,text);y-=size+4
   canvas.setStrokeColor(HexColor('#b87923'));canvas.line(margin,14,width-margin,14);canvas.showPage()
- canvas.save();return buffer.getvalue(),doc['id']+'.pdf'
+ canvas.save();return buffer.getvalue(),doc.get('short_code',doc['id'])+'.pdf'

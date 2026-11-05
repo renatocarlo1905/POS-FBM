@@ -2,7 +2,8 @@
 import copy,json,uuid,hashlib
 from datetime import datetime,timedelta
 from pathlib import Path
-from core import require,RuleError,now,pack,money,cleantext,cash_state
+from domain import require,RuleError,now,pack,money,cleantext
+from cash import cash_state
 
 def init(c):
  c.db.executescript('''CREATE TABLE IF NOT EXISTS service_orders(id text PRIMARY KEY,body text NOT NULL);
@@ -17,9 +18,9 @@ def init(c):
    o.update(simulated=True,revision=1,documents=[],credit_issued=0)
    c.db.execute('INSERT INTO service_orders VALUES(?,?) ON CONFLICT DO NOTHING',(o['id'],pack(o)))
   c.put('orders_seed_v1',True)
-def all_orders(c):return [json.loads(r[0]) for r in c.db.execute('SELECT body FROM service_orders')]
+def all_orders(c):return [__import__('simulated').order_code(c,json.loads(r[0])) for r in c.db.execute('SELECT body FROM service_orders')]
 def get(c,key):
- r=c.db.execute('SELECT body FROM service_orders WHERE id=?',(key,)).fetchone();require(r,'Orden inexistente.');return json.loads(r[0])
+ r=c.db.execute('SELECT body FROM service_orders WHERE id=?',(key,)).fetchone();require(r,'Orden inexistente.');return __import__('simulated').order_code(c,json.loads(r[0]))
 def save(c,o):c.db.execute('INSERT INTO service_orders VALUES(?,?) ON CONFLICT(id) DO UPDATE SET body=EXCLUDED.body',(o['id'],pack(o)))
 def paid(o):return sum(p['amount'] for p in o['payments'])-o.get('credit_issued',0)
 def balance(o):return max(0,o['total']-paid(o))

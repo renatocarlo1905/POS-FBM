@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Run three loopback HTTP services. No original project database is touched."""
 import argparse, json, os, signal, threading, time, urllib.request, urllib.error, secrets
+import exchanges
 import extensions as ext
 import simulated
 import cash_reports
@@ -9,7 +10,11 @@ import csv, io
 from contextlib import nullcontext
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
-from core import Central, Store, RuleError, require, pack, now, template, receipt_pdf, PERMS
+from central import Central
+from store import Store
+from domain import RuleError, require, pack, now
+from receipts import template, receipt_pdf
+from defaults import PERMS
 
 STATIC=Path(__file__).parent/'static'
 class Application:
@@ -53,13 +58,26 @@ class Application:
                         length=int(self.headers.get('Content-Length',0));require(0<length<700000,'Tamaño inválido.');data=json.loads(self.rfile.read(length));require(isinstance(data,dict),'Formato inválido.')
                     def manage(uid,origin,route,payload):
                         u=next(u for u in app.central.get('users') if u['id']==uid);policy=app.central.policy(u)
-                        if route in ('product','ingress','provider','category','category-edit','category-delete'):
+                        if route=='product-edit':
+                            require(origin==0 and u['role']=='admin','Edición disponible solo en Administración.')
+                            require(all(not store.get('offline') and not any(r['status']=='pending' for r in store.rows()) for store in app.stores.values()),'Conecta y sincroniza ambos POS antes de editar productos.')
+                            result=ext.edit_product(app.central,uid,payload)
+                        elif route in ('product','ingress','provider','category','category-edit','category-delete'):
                             require(policy.get('product_create'),'Sin permiso para ingresar productos.');result={'product':ext.create_product,'ingress':ext.ingress,'provider':ext.provider,'category':ext.create_category,'category-edit':ext.edit_category,'category-delete':ext.delete_category}[route](app.central,uid,payload)
+                        elif route=='exchange-search':result=exchanges.lookup(app.central,uid,payload.get('query',''))
+                        elif route=='exchange-view':result=exchanges.view(app.central,uid,payload.get('target'))
+                        elif route=='exchange-preview':
+                            result=exchanges.preview(app.central,uid,origin,payload);result={**result,'preview_hash':__import__('hashlib').sha256(pack(result).encode()).hexdigest()}
+                        elif route=='exchange-confirm':
+                            require(payload.get('preview_hash'),'Compara el cambio antes de confirmar.');result=exchanges.confirm(app.central,uid,origin,payload)
+                        elif route=='exchange-receipt':
+                            require(policy.get('receipts') and policy.get('reprint'),'Sin permiso de comprobantes.');result=exchanges.receipt(app.central,payload.get('id'))
                         elif route=='correction-view':result=ext.sale_view(app.central,payload['target']);require(not origin or result['original']['branch']==origin,'Operación de otra sucursal.')
                         elif route=='correction-preview':result=ext.correction_preview(app.central,uid,origin,payload)
                         elif route=='correction':result=ext.correct(app.central,uid,origin,payload)
                         else:raise RuleError('Acción desconocida.')
-                        app.central.backup(app.data/'backups/central.sqlite3');return result
+                        if route!='correction-view':app.central.backup(app.data/'backups/central.sqlite3')
+                        return result
                     if path.startswith('/download/') and not post:
                         item=app.downloads.pop(path.rsplit('/',1)[-1],None);require(item and item[0]>time.time() and item[1]==branch,'Descarga vencida. Genera el PDF de nuevo.');return self.reply(item[2],ctype=item[4] if len(item)>4 else 'application/pdf',filename=item[3])
                     if path.startswith('/internal/'):
@@ -128,7 +146,7 @@ class Application:
                                     import orders_preview
                                     order=orders.get(app.central,data.get('id'));index=data.get('index');require(type(index)is int and index>=0,'Comprobante inválido.')
                                     if order.get('documents'):
-                                        require(index<len(order['documents']),'Comprobante inexistente.');doc=order['documents'][index];pdf,filename=orders_preview.receipt_pdf(order['id'],doc['index'],doc['order'])
+                                        require(index<len(order['documents']),'Comprobante inexistente.');doc=order['documents'][index];pdf,filename=orders_preview.receipt_pdf(order['id'],doc['index'],{**doc['order'],**({'short_code':order['short_code']} if order.get('short_code') else {})})
                                     else:pdf,filename=orders_preview.receipt_pdf(order['id'],index,order)
                                     return self.pdf_reply(pdf,filename,data)
                                 raise RuleError('Ruta de órdenes inválida.')
@@ -138,23 +156,28 @@ class Application:
                             with store.lock:
                                 uid,c=store.auth(token)
                                 if path=='/api/state' and not post:return self.reply(store.state(token))
+                                if path=='/api/close-preview' and post:return self.reply(store.close_preview(token,data))
                                 if path=='/api/offline' and post:
                                     require(type(data.get('offline'))is bool,'Estado inválido.');store.put('offline',data['offline']);return self.reply({'ok':True})
                                 if path=='/api/operation' and post:return self.reply(store.submit(token,data.get('kind'),data.get('data',{}),data.get('request_id')))
-                                if path in ('/api/product','/api/ingress','/api/provider','/api/category','/api/category-edit','/api/category-delete','/api/correction-view','/api/correction-preview','/api/correction') and post:
-                                    require(not store.get('offline'),'Esta operación requiere conexión.');store.sync(uid);uid,c=store.auth(token);result=store.transport('manage',{'grant':c['grant'],'route':path.rsplit('/',1)[-1],'data':data});store.sync(uid);return self.reply(result)
+                                if path in ('/api/product','/api/ingress','/api/provider','/api/category','/api/category-edit','/api/category-delete','/api/correction-view','/api/correction-preview','/api/correction','/api/exchange-search','/api/exchange-view','/api/exchange-preview','/api/exchange-confirm') and post:
+                                    require(not store.get('offline'),'Esta operación requiere conexión.');store.sync(uid);uid,c=store.auth(token);result=store.transport('manage',{'grant':c['grant'],'route':path.rsplit('/',1)[-1],'data':data})
+                                    if path!='/api/correction-view':store.sync(uid)
+                                    return self.reply(result)
                                 if path=='/api/pdf' and post:
                                     require(c['snapshot']['policy'].get('receipts') and c['snapshot']['policy'].get('reprint'),'Sin permiso para consultar o descargar comprobantes.')
+                                    if str(data.get('id','')).startswith('CAM-'):
+                                        require(not store.get('offline'),'El comprobante de cambio requiere conexión.');doc=store.transport('manage',{'grant':c['grant'],'route':'exchange-receipt','data':data});return self.pdf_reply(receipt_pdf(doc),__import__('folios').code(doc)+'.pdf',data)
                                     r=store.db.execute('SELECT * FROM operations WHERE id=?',(data.get('id'),)).fetchone()
                                     if not r:
                                         doc=next((d for d in store.get('corrections',[]) if d['id']==data.get('id') and d['payload']['origin']=='POS'),None)
                                         if not doc:
                                             source=next((d for d in store.get('corrections',[]) if (d['payload'].get('replacement') or {}).get('id')==data.get('id')),None);require(source,'Comprobante no disponible.')
                                             doc={'id':data['id'],'branch':branch,'kind':'sale','at':source['payload']['original_at'],'actor_name':source['payload']['operator'],'template':source['template'],'payload':source['payload']['replacement']}
-                                        return self.pdf_reply(receipt_pdf(doc,True),'comprobante-'+doc['id'][:8]+'.pdf',data)
+                                        return self.pdf_reply(receipt_pdf(doc,True),'comprobante-'+__import__('folios').code(doc)+'.pdf',data)
                                     require(r['status']!='rejected','Comprobante no disponible.')
                                     count=store.get('pdf:'+r['id'],0);pdf=receipt_pdf(json.loads(r['body']),count>0);store.put('pdf:'+r['id'],count+1)
-                                    return self.pdf_reply(pdf,f'E1-S{branch}-{r["id"][:8]}.pdf',data)
+                                    return self.pdf_reply(pdf,'E1-'+__import__('folios').code(json.loads(r['body']))+'.pdf',data)
                         else:
                             with app.central.lock:
                                 u=app.central.auth(token,admin=True);actor=u['id']
@@ -178,15 +201,15 @@ class Application:
                                     def safe(v):
                                         v=str(v or '');return "'"+v if v.startswith(('=','+','-','@','\t','\r')) else v
                                     for r in cash_reports.report(app.central):
-                                        if r['id'] in selected:writer.writerow([safe(r['id']),'Simulada' if r['simulated'] else 'Manual',r['branch'],r['opened_at'],r['closed_at'] or '',safe(r['opened_by']),safe(r['closed_by']),format(r['expected']/100,'.2f'),'' if r['counted'] is None else format(r['counted']/100,'.2f'),'' if r['difference'] is None else format(r['difference']/100,'.2f')])
+                                        if r['id'] in selected:writer.writerow([safe(r.get('short_code',r['id'])),'Simulada' if r['simulated'] else 'Manual',r['branch'],r['opened_at'],r['closed_at'] or '',safe(r['opened_by']),safe(r['closed_by']),format(r['expected']/100,'.2f'),'' if r['counted'] is None else format(r['counted']/100,'.2f'),'' if r['difference'] is None else format(r['difference']/100,'.2f')])
                                     key=secrets.token_urlsafe(24);app.downloads[key]=(time.time()+60,branch,('\ufeff'+output.getvalue()).encode('utf-8'),'reporte-cajas.csv','text/csv; charset=utf-8');return self.reply({'url':'/download/'+key})
                                 if path=='/api/state' and not post:
                                     events=[]
                                     for r in reversed(app.central.events()):
                                         e=json.loads(r['body']);e.pop('grant');e.pop('input');e['payload'].pop('request',None);events.append({**e,'status':r['status'],'issue':r['issue'],'received_at':r['received'],**({'adjusted':ext.sale_view(app.central,e['id'])['adjusted']} if e['kind']=='sale' and r['status']=='accepted' else {})})
-                                    events.extend(simulated.sales(app.central));events.extend(orders.sale_events(app.central));events.extend(orders.collection_events(app.central));events.sort(key=lambda e:e['at'],reverse=True)
-                                    return self.reply({'user':u['name'],'users':app.central.users(),'roles':app.central.get('roles'),'permissions':PERMS,'catalog':app.central.catalog(True),'templates':app.central.get('templates'),'operations':events,'audit':[dict(r) for r in app.central.db.execute('SELECT * FROM audit ORDER BY id DESC LIMIT 30')],'at':now(),'corrections':ext.corrections(app.central),'materials':app.central.get('materials'),'types':app.central.get('types'),'categories':app.central.get('categories',[]),'providers':app.central.get('providers'),'warehouses':ext.WAREHOUSES,'inventory_entries':[dict(r) for r in app.central.db.execute('SELECT * FROM inventory_entries ORDER BY at DESC LIMIT 50')]})
-                                if path in ('/api/product','/api/ingress','/api/provider','/api/category','/api/category-edit','/api/category-delete','/api/correction-view','/api/correction-preview','/api/correction') and post:return self.reply(manage(actor,0,path.rsplit('/',1)[-1],data))
+                                    events.extend(exchanges.events(app.central));events.extend(simulated.sales(app.central));events.extend(orders.sale_events(app.central));events.extend(orders.collection_events(app.central));events.sort(key=lambda e:e['at'],reverse=True)
+                                    return self.reply({'exchange_alerts':exchanges.alerts(app.central),'user':u['name'],'users':app.central.users(),'roles':app.central.get('roles'),'permissions':PERMS,'catalog':app.central.catalog(True),'templates':app.central.get('templates'),'operations':[__import__('folios').decorate(app.central,e) for e in events],'audit':[dict(r) for r in app.central.db.execute('SELECT * FROM audit ORDER BY id DESC LIMIT 30')],'at':now(),'corrections':ext.corrections(app.central),'materials':app.central.get('materials'),'types':app.central.get('types'),'categories':app.central.get('categories',[]),'providers':app.central.get('providers'),'warehouses':ext.WAREHOUSES,'inventory_entries':[dict(r) for r in app.central.db.execute('SELECT * FROM inventory_entries ORDER BY at DESC LIMIT 50')]})
+                                if path in ('/api/product-edit','/api/product','/api/ingress','/api/provider','/api/category','/api/category-edit','/api/category-delete','/api/correction-view','/api/correction-preview','/api/correction','/api/exchange-search','/api/exchange-view','/api/exchange-preview','/api/exchange-confirm') and post:return self.reply(manage(actor,0,path.rsplit('/',1)[-1],data))
                                 if path=='/api/employee' and post:app.central.edit_user(actor,data)
                                 elif path=='/api/role' and post:app.central.edit_role(actor,data)
                                 elif path=='/api/template' and post:
@@ -196,18 +219,20 @@ class Application:
                                     t=template(data);e={'id':'VISTA-PREVIA-SIN-OPERACION','branch':data.get('branch',1),'kind':'sale','at':now(),'actor_name':'Ejemplo','template':t,'payload':{'items':[{'qty':1,'name':'Anillo espiral','price':100000,'net':90000}],'gross':100000,'discount':10000,'total':90000,'received_cash':100000,'cash':90000,'change':10000,'card':0,'transfer':0}}
                                     return self.pdf_reply(receipt_pdf(e),'vista-previa-ticket.pdf',data)
                                 elif path=='/api/pdf' and post:
+                                    if str(data.get('id','')).startswith('CAM-'):
+                                        doc=exchanges.receipt(app.central,data['id']);return self.pdf_reply(receipt_pdf(doc),__import__('folios').code(doc)+'.pdf',data)
                                     order_id='-'.join(str(data.get('id','')).split('-')[:2])
                                     if order_id.startswith(('APA-','REP-')):
                                         import orders_preview
                                         order=orders.get(app.central,order_id);doc=order['documents'][-1] if '-CAMBIO-' in str(data.get('id','')) else next((x for x in reversed(order['documents']) if x['label'] in ('Liquidación','Anticipo')),order['documents'][-1]);pdf,filename=orders_preview.receipt_pdf(order_id,doc['index'],doc['order']);return self.pdf_reply(pdf,filename,data)
-                                    r=app.central.db.execute('SELECT * FROM events WHERE id=?',(data.get('id'),)).fetchone();event=json.loads(r['body']) if r and r['status']=='accepted' else simulated.receipt(app.central,data.get('id')) or ext.sale_view(app.central,data.get('id'))['original'];return self.pdf_reply(receipt_pdf(event,True),'E1-'+event['id'][:8]+'.pdf',data)
+                                    r=app.central.db.execute('SELECT * FROM events WHERE id=?',(data.get('id'),)).fetchone();event=json.loads(r['body']) if r and r['status']=='accepted' else next((doc for doc in ext.corrections(app.central) if doc['id']==data.get('id')),None) or simulated.receipt(app.central,data.get('id')) or ext.sale_view(app.central,data.get('id'))['original'];return self.pdf_reply(receipt_pdf(event,True),'E1-'+__import__('folios').code(event)+'.pdf',data)
                                 else:raise RuleError('Ruta no disponible.')
                                 app.central.backup(app.data/'backups/central.sqlite3');return self.reply({'ok':True})
                         raise RuleError('Ruta no disponible.')
                     require(not post,'Ruta no disponible.')
                     entry='dashboard.html' if branch==0 else f'sucursal-{branch}.html'
                     name=entry if path=='/' else path.lstrip('/')
-                    require(name in (entry,'receipt-view.html','receipt-view.js','receipt-view.css','brand-symbol.png','brand-name.png','app.js','extra.js','cash-reports.js','sales-model.js','sales-reports.js','orders-demo.js','orders-model.js','orders.js','styles.css','company-logo.png','Montserrat-Regular.ttf','Montserrat-Bold.ttf'),'Archivo no disponible.')
+                    require(name in (entry,'receipt-view.html','receipt-view.js','receipt-view.css','brand-symbol.png','brand-name.png','app.js','exchanges.js','extra.js','cash-reports.js','sales-model.js','sales-reports.js','orders-demo.js','orders-model.js','orders.js','styles.css','company-logo.png','Montserrat-Regular.ttf','Montserrat-Bold.ttf'),'Archivo no disponible.')
                     ctype='image/png' if name.endswith('.png') else 'font/ttf' if name.endswith('.ttf') else 'text/html; charset=utf-8' if name.endswith('.html') else 'text/css; charset=utf-8' if name.endswith('.css') else 'text/javascript; charset=utf-8'
                     return self.reply((STATIC/name).read_bytes(),ctype=ctype)
                 except RuleError as e:self.reply({'error':str(e)},400)

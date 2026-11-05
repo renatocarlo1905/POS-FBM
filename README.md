@@ -35,6 +35,20 @@ El instalador genera credenciales locales en `lab/e1/data/`, excluidas de Git. N
 
 No abrir los HTML con doble clic: necesitan los servicios. Las cuentas iniciales y contraseñas de demostración se describen en [la guía del laboratorio](docs/e1/README.md); deben cambiarse antes de cualquier despliegue operativo.
 
+## Abrirlo en la computadora de Renato
+
+Busca **POS FBM** en el menú de aplicaciones o abre el acceso **POS-FBM** del escritorio. El lanzador inicia PostgreSQL, espera que esté disponible, inicia el servicio local y abre el dashboard. Puede aparecer una terminal durante unos segundos.
+
+Alternativa desde la terminal:
+
+```bash
+/home/renatocarlo19/Documentos/POS-nuevo/scripts/local/open-pos.sh
+```
+
+El servicio persistente está instalado en `~/.config/systemd/user/frida-pos-e1.service`. Se inicia al usar el acceso, no automáticamente al encender la computadora. Para consultar su estado: `systemctl --user status frida-pos-e1`. Para detener la aplicación: `systemctl --user stop frida-pos-e1` (no elimina datos).
+
+Abrir únicamente el enlace del navegador no enciende el servidor. Si aparece `ERR_CONNECTION_REFUSED`, utiliza el lanzador. Si Linux lo pide la primera vez, haz clic derecho sobre el acceso del escritorio y elige **Permitir lanzar**. Esta instalación local utiliza rutas de esta computadora; para otra computadora sigue el procedimiento de instalación anterior.
+
 ## Organización y desarrollo
 
 - [Metodología, arquitectura y decisiones de framework](docs/desarrollo.md).

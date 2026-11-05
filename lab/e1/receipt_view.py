@@ -4,7 +4,7 @@ import subprocess
 import tempfile
 from pathlib import Path
 from PIL import Image
-from core import RuleError
+from domain import RuleError
 
 def render_pages(pdf):
     with tempfile.TemporaryDirectory(prefix='frida-receipt-') as directory:

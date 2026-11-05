@@ -352,3 +352,31 @@ CREATE TABLE IF NOT EXISTS public.simulated_shifts (
     id text PRIMARY KEY,
     body text NOT NULL
 );
+
+-- Commercial exchanges: additive E1 schema, also initialized by exchanges.init.
+CREATE TABLE IF NOT EXISTS public.merchandise_exchanges (
+    id text PRIMARY KEY,
+    digest text NOT NULL,
+    body text NOT NULL
+);
+DROP TRIGGER IF EXISTS immutable_merchandise_exchanges ON public.merchandise_exchanges;
+CREATE TRIGGER immutable_merchandise_exchanges BEFORE UPDATE OR DELETE ON public.merchandise_exchanges
+FOR EACH ROW EXECUTE FUNCTION public.prevent_fact_change();
+
+-- Identificadores cortos persistentes para reemplazos/cambios.
+-- Ventas ordinarias: V + branch + seq (UNIQUE(branch,seq) en events).
+CREATE TABLE IF NOT EXISTS receipt_codes (
+ identifier text PRIMARY KEY, branch integer NOT NULL CHECK(branch IN (1,2)),
+ prefix text NOT NULL CHECK(prefix IN ('R','C')),
+ number bigint GENERATED ALWAYS AS IDENTITY UNIQUE
+);
+DROP TRIGGER IF EXISTS immutable_receipt_codes ON receipt_codes;
+CREATE TRIGGER immutable_receipt_codes BEFORE UPDATE OR DELETE ON receipt_codes
+ FOR EACH ROW EXECUTE FUNCTION prevent_fact_change();
+
+CREATE TABLE IF NOT EXISTS simulated_receipt_codes (
+ identifier text PRIMARY KEY, prefix text NOT NULL, branch integer NOT NULL,
+ number bigint GENERATED ALWAYS AS IDENTITY UNIQUE
+);
+CREATE TRIGGER immutable_simulated_receipt_codes BEFORE UPDATE OR DELETE ON simulated_receipt_codes
+ FOR EACH ROW EXECUTE FUNCTION prevent_fact_change();

@@ -15,7 +15,9 @@ window.addEventListener('message',async function receive(e){
    pages.append(image);await image.decode();
   }));
   statusText.textContent=`${receipt.pages.length} copia(s) · Listo para imprimir`;printButton.disabled=false;
+  if(e.data.autoPrint)window.print();
  }catch{statusText.textContent='No se pudo mostrar el comprobante. Cierra esta ventana y vuelve a intentarlo.';}
+ finally{document.body.classList.remove('receipt-loading');}
 });
 if(window.opener)window.opener.postMessage({type:'receipt-ready'},location.origin);
-else statusText.textContent='Abre un comprobante desde el dashboard o el punto de venta.';
+else {statusText.textContent='Abre un comprobante desde el dashboard o el punto de venta.';document.body.classList.remove('receipt-loading');}

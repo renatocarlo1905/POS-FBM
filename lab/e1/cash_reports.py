@@ -2,7 +2,7 @@
 import json, datetime as dt, random
 from collections import defaultdict
 from zoneinfo import ZoneInfo
-from core import pack, now
+from domain import pack, now
 TZ=ZoneInfo('America/Mexico_City')
 TOTALS=('gross','discount','total','cash','card','transfer')
 def init(c):
@@ -30,6 +30,13 @@ def report(c):
  rows=manual(events,corrections)
  from order_service import movements,sale_events
  for row in rows:
+  exchange_moves=[p for p in __import__('exchanges').movements(c,row['branch']) if p['session']==row['id']]
+  row['exchange_collections']={k:sum(p[k] for p in exchange_moves) for k in ('cash','card','transfer')}
+  row['moves'] += [{'at':p['at'],'actor':p['actor'],'reason':p['reason'],'amount':p['cash'],'kind':'exchange'} for p in exchange_moves]
+  exchange_events=[e['payload'] for e in __import__('exchanges').events(c) if e['payload']['session']==row['id']]
+  for k in TOTALS:row['totals'][k]+=sum(p.get(k,0) for p in exchange_events)
+  if not row['closed_at']:
+   row['expected']+=sum(p['cash'] for p in exchange_moves);row['adjusted_expected']+=sum(p['cash'] for p in exchange_moves)
   payments=[p for p in movements(c,row['branch']) if p['session']==row['id']]
   added=sum(p['cash'] for p in payments)
   recognized=[e['payload'] for e in sale_events(c) if e['payload'].get('session')==row['id']]
@@ -38,7 +45,7 @@ def report(c):
   row['moves'] += [{'at':p['at'],'actor':p['actor'],'reason':p['kind']+' · '+p['order'],'amount':p['cash']} for p in payments]
   row['order_collections']={k:sum(p.get(k,0) for p in payments) for k in ('cash','card','transfer','credit')}
   if not row['closed_at']:row['expected']+=added;row['adjusted_expected']+=added
- rows+=[json.loads(r[0]) for r in c.db.execute('SELECT body FROM simulated_shifts')]
+ rows+=__import__('simulated').assign_codes(c,[json.loads(r[0]) for r in c.db.execute('SELECT body FROM simulated_shifts')],'SC')
  return sorted(rows,key=lambda x:x['opened_at'],reverse=True)
 def seed(c):
  init(c)
